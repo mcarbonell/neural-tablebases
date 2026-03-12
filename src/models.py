@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 
 class MLP(nn.Module):
-    def __init__(self, input_size=768, hidden_layers=[256, 128, 64], num_wdl_classes=5, dropout=0.1):
+    def __init__(self, input_size=768, hidden_layers=[256, 128, 64], num_wdl_classes=3, dropout=0.1):
         super(MLP, self).__init__()
         layers = []
         last_size = input_size
@@ -47,7 +47,7 @@ class SineLayer(nn.Module):
         return torch.sin(self.omega_0 * self.linear(input))
 
 class SIREN(nn.Module):
-    def __init__(self, input_size=768, hidden_size=128, num_layers=3, num_wdl_classes=5,
+    def __init__(self, input_size=768, hidden_size=128, num_layers=3, num_wdl_classes=3,
                  first_omega_0=30, hidden_omega_0=30, dropout=0.1):
         super(SIREN, self).__init__()
         self.net = []
@@ -71,49 +71,58 @@ class SIREN(nn.Module):
         return wdl_logits, dtz_val
 
 
-def get_model_for_endgame(model_type: str, num_pieces: int, num_wdl_classes: int = 5):
+def get_model_for_endgame(model_type: str, num_pieces: int, num_wdl_classes: int = 3, use_relative_encoding: bool = False):
     """
     Returns an appropriate model for the given endgame configuration.
     
     Args:
         model_type: 'mlp' or 'siren'
         num_pieces: Number of pieces in the endgame (e.g., 3 for KQvK)
-        num_wdl_classes: Number of WDL classes (default: 5)
+        num_wdl_classes: Number of WDL classes (default: 3 for -2, 0, 2)
+        use_relative_encoding: If True, uses relative encoding dimensions
     
     Returns:
         Model instance with appropriate architecture
     """
-    # Compact encoding: num_pieces * 64 dimensions
-    input_size = num_pieces * 64
+    if use_relative_encoding:
+        # Relative encoding: num_pieces*10 + num_pairs*4 + 1
+        # For 3 pieces: 3*10 + 3*4 + 1 = 43
+        # For 4 pieces: 4*10 + 6*4 + 1 = 65
+        # For 5 pieces: 5*10 + 10*4 + 1 = 91
+        num_pairs = (num_pieces * (num_pieces - 1)) // 2
+        input_size = num_pieces * 10 + num_pairs * 4 + 1
+    else:
+        # Compact encoding: num_pieces * 64 dimensions
+        input_size = num_pieces * 64
     
     if model_type == "mlp":
-        # Simpler architecture for simple endgames
+        # Much larger models for aggressive overfitting
         if num_pieces <= 3:
-            # Very simple endgame: small model
-            hidden_layers = [64, 32]
+            # 3-piece endgame: large model for ~368K positions
+            hidden_layers = [512, 512, 256, 128]
         elif num_pieces <= 4:
-            # 4-piece endgame: medium model
-            hidden_layers = [128, 64, 32]
+            # 4-piece endgame: very large model
+            hidden_layers = [1024, 512, 256, 128]
         else:
-            # 5+ piece endgame: larger model
-            hidden_layers = [256, 128, 64]
+            # 5+ piece endgame: huge model
+            hidden_layers = [2048, 1024, 512, 256]
         
         return MLP(input_size=input_size, hidden_layers=hidden_layers,
-                   num_wdl_classes=num_wdl_classes, dropout=0.1)
+                   num_wdl_classes=num_wdl_classes, dropout=0.2)
     
     elif model_type == "siren":
-        # SIREN architecture with dropout for regularization
+        # SIREN architecture - larger for overfitting
         if num_pieces <= 3:
-            hidden_size = 64
-            num_layers = 2
-            dropout = 0.0  # No dropout for very small models
-        elif num_pieces <= 4:
-            hidden_size = 128
-            num_layers = 3
-            dropout = 0.1
-        else:
             hidden_size = 256
             num_layers = 4
+            dropout = 0.1
+        elif num_pieces <= 4:
+            hidden_size = 512
+            num_layers = 5
+            dropout = 0.1
+        else:
+            hidden_size = 1024
+            num_layers = 6
             dropout = 0.1
         
         return SIREN(input_size=input_size, hidden_size=hidden_size,

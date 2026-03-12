@@ -15,18 +15,47 @@ class TablebaseDataset(Dataset):
         print(f"Loading dataset from {data_path}...")
         data = np.load(data_path)
         self.x = torch.from_numpy(data['x']).float()
-        # WDL maps {-2, -1, 0, 1, 2} -> {0, 1, 2, 3, 4} for CrossEntropy
-        self.wdl = torch.from_numpy(data['wdl']).long() + 2
+        
+        # Map WDL to 3 classes: {-2 -> 0, 0 -> 1, 2 -> 2}
+        wdl_raw = data['wdl']
+        wdl_mapped = np.zeros_like(wdl_raw)
+        wdl_mapped[wdl_raw == -2] = 0  # Loss
+        wdl_mapped[wdl_raw == 0] = 1   # Draw
+        wdl_mapped[wdl_raw == 2] = 2   # Win
+        
+        self.wdl = torch.from_numpy(wdl_mapped).long()
         self.dtz = torch.from_numpy(data['dtz']).float()
         
         # Store input size for model initialization
         self.input_size = self.x.shape[1]
         
-        # Count pieces from input size (compact encoding: num_pieces * 64)
-        self.num_pieces = self.input_size // 64
+        # Detect encoding type
+        # Relative encoding: 43 dims for 3 pieces, 65 for 4, 91 for 5
+        # Compact encoding: 192 dims for 3 pieces, 256 for 4, 320 for 5
+        if self.input_size == 43:
+            self.num_pieces = 3
+            self.use_relative_encoding = True
+        elif self.input_size == 65:
+            self.num_pieces = 4
+            self.use_relative_encoding = True
+        elif self.input_size == 91:
+            self.num_pieces = 5
+            self.use_relative_encoding = True
+        else:
+            # Compact encoding: num_pieces * 64
+            self.num_pieces = self.input_size // 64
+            self.use_relative_encoding = False
         
+        # Calculate class weights for balanced training
+        unique, counts = np.unique(wdl_mapped, return_counts=True)
+        total = len(wdl_mapped)
+        self.class_weights = torch.FloatTensor([total / (len(unique) * c) for c in counts])
+        
+        encoding_type = "relative/geometric" if self.use_relative_encoding else "compact one-hot"
         print(f"Dataset loaded: {len(self.x)} positions.")
-        print(f"Input size: {self.input_size} ({self.num_pieces} pieces)")
+        print(f"Input size: {self.input_size} ({self.num_pieces} pieces, {encoding_type} encoding)")
+        print(f"WDL distribution: Loss={counts[0]}, Draw={counts[1]}, Win={counts[2]}")
+        print(f"Class weights: {self.class_weights.numpy()}")
 
     def __len__(self):
         return len(self.x)
@@ -58,21 +87,14 @@ def train(args):
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
 
-    # Use adaptive model based on endgame complexity
-    model = get_model_for_endgame(args.model, dataset.num_pieces, num_wdl_classes=5).to(device)
+    # Use adaptive model based on endgame complexity (3 classes)
+    model = get_model_for_endgame(args.model, dataset.num_pieces, num_wdl_classes=3, 
+                                   use_relative_encoding=dataset.use_relative_encoding).to(device)
     log(f"Model architecture: {model}")
     log(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
-    # Calculate class weights for imbalanced dataset
-    wdl_counts = Counter(dataset.wdl.numpy())
-    total_samples = len(dataset)
-    class_weights = torch.zeros(5, dtype=torch.float32)
-    for cls in range(5):
-        if cls in wdl_counts:
-            class_weights[cls] = total_samples / (5.0 * wdl_counts[cls])
-        else:
-            class_weights[cls] = 1.0
-    class_weights = class_weights.to(device)
+    # Use class weights from dataset for imbalanced classes
+    class_weights = dataset.class_weights.to(device)
     log(f"Class weights: {class_weights.cpu().numpy()}")
     
     # CrossEntropy with class weights and reduction='none' for hard example weighting
