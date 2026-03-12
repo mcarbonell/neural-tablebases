@@ -8,6 +8,7 @@ import argparse
 import time
 from datetime import datetime
 from models import MLP, SIREN, get_model_for_endgame
+from collections import Counter
 
 class TablebaseDataset(Dataset):
     def __init__(self, data_path):
@@ -62,27 +63,44 @@ def train(args):
     log(f"Model architecture: {model}")
     log(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
-    # CrossEntropy with reduction='none' for weighting
-    criterion_wdl = nn.CrossEntropyLoss(reduction='none')
+    # Calculate class weights for imbalanced dataset
+    wdl_counts = Counter(dataset.wdl.numpy())
+    total_samples = len(dataset)
+    class_weights = torch.zeros(5, dtype=torch.float32)
+    for cls in range(5):
+        if cls in wdl_counts:
+            class_weights[cls] = total_samples / (5.0 * wdl_counts[cls])
+        else:
+            class_weights[cls] = 1.0
+    class_weights = class_weights.to(device)
+    log(f"Class weights: {class_weights.cpu().numpy()}")
+    
+    # CrossEntropy with class weights and reduction='none' for hard example weighting
+    criterion_wdl = nn.CrossEntropyLoss(weight=class_weights, reduction='none')
     criterion_dtz = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
     
-    # Scheduler: ReduceLROnPlateau for adaptive learning rate
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=10, factor=0.5, min_lr=1e-6)
+    # Scheduler: More conservative ReduceLROnPlateau
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, 'max', patience=20, factor=0.7, min_lr=1e-5
+    )
 
     best_val_acc = 0.0
+    best_val_loss = float('inf')
     best_model_state = None
     patience_counter = 0
     
     # Overfitting Loop: Track hard examples
     hard_examples = []
     hard_example_weight = args.hard_weight  # Weight for hard examples
+    hard_examples_count = 0  # Track total hard examples found
 
     for epoch in range(args.epochs):
         epoch_start_time = time.time()
         model.train()
         total_loss = 0
         correct_wdl = 0
+        epoch_hard_examples = 0
         
         for batch_idx, (x, wdl, dtz) in enumerate(train_loader):
             x, wdl, dtz = x.to(device), wdl.to(device), dtz.to(device)
@@ -92,19 +110,19 @@ def train(args):
             
             loss_wdl = criterion_wdl(wdl_logits, wdl)
             
-            # Aggressive Hard Example Mining
+            # Less aggressive Hard Example Mining
             with torch.no_grad():
                 predictions = wdl_logits.argmax(1)
                 is_wrong = (predictions != wdl).float()
                 
-                # Dynamic weighting: wrong examples get much higher weight
-                # Weight increases as training progresses (more aggressive overfitting)
-                epoch_factor = min(epoch / 50.0, 3.0)  # Max 3x weight increase
+                # Reduced dynamic weighting: max 2x instead of 3x
+                epoch_factor = min(epoch / 100.0, 2.0)  # Max 2x weight increase, slower ramp
                 weights = is_wrong * (hard_example_weight * (1 + epoch_factor)) + 1.0
                 
-                # Track hard examples for potential re-sampling
-                if args.hard_mining and batch_idx % 10 == 0:
+                # Track hard examples less frequently
+                if args.hard_mining and batch_idx % 20 == 0:  # Every 20 batches instead of 10
                     wrong_indices = torch.where(is_wrong == 1)[0]
+                    epoch_hard_examples += len(wrong_indices)
                     for idx in wrong_indices:
                         hard_examples.append({
                             'x': x[idx].cpu(),
@@ -122,6 +140,8 @@ def train(args):
             
             total_loss += loss.item()
             correct_wdl += (wdl_logits.argmax(1) == wdl).sum().item()
+        
+        hard_examples_count += epoch_hard_examples
 
         # Validation
         model.eval()
@@ -141,15 +161,16 @@ def train(args):
         log(f"Epoch {epoch+1}/{args.epochs} - Time: {epoch_duration:.2f}s - "
             f"Train Loss: {total_loss/len(train_loader):.4f} - Val Loss: {val_loss_avg:.4f} - "
             f"Train Acc: {correct_wdl/train_size:.4f} - Val Acc: {val_acc:.4f} - "
-            f"LR: {optimizer.param_groups[0]['lr']:.6f}")
+            f"LR: {optimizer.param_groups[0]['lr']:.6f} - Hard Examples: {epoch_hard_examples}")
 
-        # Save Best Model
-        if val_acc > best_val_acc:
+        # Save Best Model (based on val_loss for better generalization)
+        if val_loss_avg < best_val_loss:
+            best_val_loss = val_loss_avg
             best_val_acc = val_acc
             best_model_state = model.state_dict().copy()
             save_path = os.path.join("data", f"{args.model}_best.pth")
             torch.save(model.state_dict(), save_path)
-            log(f"New best validation accuracy! Model saved to {save_path}")
+            log(f"New best validation loss! Val Loss: {val_loss_avg:.4f}, Val Acc: {val_acc:.4f}. Model saved to {save_path}")
             patience_counter = 0
         else:
             patience_counter += 1
@@ -176,8 +197,8 @@ def train(args):
             hard_wdl = torch.stack([ex['wdl'] for ex in hard_examples]).to(device)
             hard_dtz = torch.stack([ex['dtz'] for ex in hard_examples]).to(device)
             
-            # Train on hard examples with higher learning rate
-            hard_optimizer = optim.Adam(model.parameters(), lr=args.lr * 2)
+            # Train on hard examples with same learning rate (not 2x)
+            hard_optimizer = optim.Adam(model.parameters(), lr=args.lr)
             for _ in range(args.hard_mining_epochs):
                 hard_optimizer.zero_grad()
                 wdl_logits, dtz_pred = model(hard_x)
@@ -193,6 +214,9 @@ def train(args):
     save_path = os.path.join("data", f"{args.model}_final.pth")
     torch.save(model.state_dict(), save_path)
     log(f"Final model saved to {save_path}")
+    log(f"Total hard examples processed: {hard_examples_count}")
+    log(f"Best validation accuracy: {best_val_acc:.4f}")
+    log(f"Best validation loss: {best_val_loss:.4f}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -203,13 +227,13 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--patience", type=int, default=50,
                         help="Early stopping patience (epochs without improvement)")
-    parser.add_argument("--hard_weight", type=float, default=5.0,
-                        help="Weight multiplier for hard examples")
+    parser.add_argument("--hard_weight", type=float, default=2.0,
+                        help="Weight multiplier for hard examples (reduced from 5.0)")
     parser.add_argument("--hard_mining", action="store_true", default=True,
-                        help="Enable aggressive hard example mining")
-    parser.add_argument("--hard_mining_freq", type=int, default=10,
-                        help="Frequency of hard example re-training (epochs)")
-    parser.add_argument("--hard_mining_epochs", type=int, default=5,
-                        help="Number of epochs to train on hard examples")
+                        help="Enable hard example mining")
+    parser.add_argument("--hard_mining_freq", type=int, default=50,
+                        help="Frequency of hard example re-training (epochs, increased from 10)")
+    parser.add_argument("--hard_mining_epochs", type=int, default=3,
+                        help="Number of epochs to train on hard examples (reduced from 5)")
     args = parser.parse_args()
     train(args)

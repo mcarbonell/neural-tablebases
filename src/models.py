@@ -47,13 +47,17 @@ class SineLayer(nn.Module):
         return torch.sin(self.omega_0 * self.linear(input))
 
 class SIREN(nn.Module):
-    def __init__(self, input_size=768, hidden_size=128, num_layers=3, num_wdl_classes=5, first_omega_0=30, hidden_omega_0=30):
+    def __init__(self, input_size=768, hidden_size=128, num_layers=3, num_wdl_classes=5,
+                 first_omega_0=30, hidden_omega_0=30, dropout=0.1):
         super(SIREN, self).__init__()
         self.net = []
         self.net.append(SineLayer(input_size, hidden_size, is_first=True, omega_0=first_omega_0))
 
         for i in range(num_layers - 1):
             self.net.append(SineLayer(hidden_size, hidden_size, is_first=False, omega_0=hidden_omega_0))
+            # Add dropout after each hidden layer (except the last one)
+            if dropout > 0 and i < num_layers - 2:
+                self.net.append(nn.Dropout(dropout))
 
         self.net = nn.Sequential(*self.net)
         
@@ -98,19 +102,23 @@ def get_model_for_endgame(model_type: str, num_pieces: int, num_wdl_classes: int
                    num_wdl_classes=num_wdl_classes, dropout=0.1)
     
     elif model_type == "siren":
-        # SIREN architecture
+        # SIREN architecture with dropout for regularization
         if num_pieces <= 3:
             hidden_size = 64
             num_layers = 2
+            dropout = 0.0  # No dropout for very small models
         elif num_pieces <= 4:
             hidden_size = 128
             num_layers = 3
+            dropout = 0.1
         else:
             hidden_size = 256
             num_layers = 4
+            dropout = 0.1
         
         return SIREN(input_size=input_size, hidden_size=hidden_size,
-                     num_layers=num_layers, num_wdl_classes=num_wdl_classes)
+                     num_layers=num_layers, num_wdl_classes=num_wdl_classes,
+                     dropout=dropout)
     
     else:
         raise ValueError(f"Unknown model type: {model_type}")
