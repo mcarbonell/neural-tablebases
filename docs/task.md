@@ -1,0 +1,21 @@
+# Task: Neural Tablebase Project Initial Setup and Research
+
+- [x] Research Project Vision and Design <!-- id: 0 -->
+    - [x] Read `CHESS_RESOLUTION_VISION.md` <!-- id: 1 -->
+    - [x] Read `NEURAL_TABLEBASE_DESIGN.md` <!-- id: 2 -->
+    - [x] Read `NEURAL_TABLEBASE_SPEC_V2.md` <!-- id: 3 -->
+    - [x] Read `NEURAL_TABLEBASE_IMPLEMENTATION_PLAN.md` <!-- id: 4 -->
+- [x] Analyze existing scripts <!-- id: 5 -->
+    - [x] Analyze `docs/generate_krkp_dataset.py` <!-- id: 6 -->
+- [x] Develop Neural Tablebase Prototype (3-piece) <!-- id: 7 -->
+    - [x] Create `implementation_plan.md` <!-- id: 8 -->
+    - [x] Create general dataset generator for 3-piece endgames <!-- id: 9 -->
+    - [x] Implement baseline MLP model <!-- id: 10 -->
+    - [x] Implement SIREN/KAN model <!-- id: 11 -->
+    - [x] Evaluate and compare results <!-- id: 12 -->
+- [x] Provide feedback and final report <!-- id: 13 -->
+- [x] Long-Term Training Optimization <!-- id: 14 -->
+    - [x] Add timestamps and logging to `train.py` <!-- id: 15 -->
+    - [x] Implement model checkpointing based on best accuracy <!-- id: 16 -->
+    - [x] Add explicit Hard Example Mining for 99%+ target <!-- id: 17 -->
+    - [x] Prepare script for overnight run <!-- id: 18 -->
