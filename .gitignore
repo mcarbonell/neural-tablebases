@@ -1,3 +1,6 @@
 syzygy/
 logs/
 data/
+
+
+__pycache__
