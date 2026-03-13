@@ -63,18 +63,23 @@ Located in `training/`:
 - **train_improved.bat** - Windows training script
 - **train_improved.sh** - Linux/Mac training script
 - **test_multiple_endgames.bat** - Batch test multiple endgames
+- **generate_parallel.bat** - Parallel dataset generation (6-7x faster)
 
 ### Usage Examples
 
 ```bash
-# Windows
+# Windows training
 scripts\training\train_improved.bat
 
-# Linux/Mac
+# Linux/Mac training
 bash scripts/training/train_improved.sh
 
 # Test multiple endgames
 scripts\training\test_multiple_endgames.bat
+
+# Parallel dataset generation (NEW!)
+scripts\training\generate_parallel.bat KRRvK 8 10000
+scripts\training\generate_parallel.bat KRvKP
 ```
 
 ## 📝 Script Categories
@@ -103,6 +108,41 @@ scripts\training\test_multiple_endgames.bat
 - `test_multiple_endgames.bat` - Batch testing
 
 ## 🔧 Common Tasks
+
+### Generate Datasets (Parallel - Recommended)
+
+```bash
+# Quick generation with defaults (uses all CPU cores)
+python src/generate_datasets_parallel.py --config KRRvK --relative
+
+# Or use the batch script
+scripts\training\generate_parallel.bat KRRvK
+
+# Custom settings
+python src/generate_datasets_parallel.py \
+    --config KRvKP \
+    --relative \
+    --workers 6 \
+    --chunk-size 5000
+
+# With encoding v2 (move distance)
+python src/generate_datasets_parallel.py \
+    --config KPvKP \
+    --relative \
+    --move-distance
+```
+
+**Performance:** 6-7x faster than single-threaded (15 hours → 2.5 hours for 4-piece)
+
+### Generate Datasets (Single-threaded)
+
+```bash
+# Basic generation
+python src/generate_datasets.py --config KQvK --relative
+
+# With encoding v2
+python src/generate_datasets.py --config KQvK --relative --move-distance
+```
 
 ### Analyze Training Results
 

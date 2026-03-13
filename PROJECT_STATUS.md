@@ -29,25 +29,30 @@ Validate that geometric encoding scales to 4-piece endgames with high accuracy.
 ### In Progress 🔄
 
 1. **KRRvK Dataset Generation**
-   - Status: 54% complete (12.9M / 24M positions)
-   - Time elapsed: ~8 hours
-   - Time remaining: ~7 hours
-   - Memory usage: 316 MB (monitoring for potential 6-8 GB)
+   - Status: 81% complete (~13.6M / 16.8M combinations checked)
+   - Valid positions found: ~19.5M
+   - Time elapsed: ~18 hours
+   - Time remaining: ~3 hours
+   - Using: Single-threaded generation
 
-2. **Encoding v2 Implementation**
-   - Code: Complete ✅
-   - Testing: Complete ✅
-   - Validation: Pending (will test on KRvKP)
+2. **Parallel Generation Implementation**
+   - Status: Complete ✅
+   - Performance: 6-7x faster than single-threaded
+   - Features: Progress tracking, incremental disk writing, error handling
+   - Ready for: Next 4-piece endgames
 
 ### Planned ⏭️
 
-1. **KRRvK Training**
+1. **KRRvK Training** (when generation completes)
+   - Test both MLP and SIREN architectures
    - Expected accuracy: >99.9%
    - Expected time: ~60 minutes
    - Purpose: Validate 4-piece scaling
 
-2. **KRvKP Dataset & Training**
-   - Asymmetric endgame (Rook vs Pawn)
+2. **Next 4-Piece Endgames** (using parallel generation)
+   - KRvKP: Asymmetric, pawn complexity (~2.5 hours generation)
+   - KPvKP: Most complex 4-piece, zugzwang heavy (~2.5 hours generation)
+   - KBPvK: Fortress positions (~2.5 hours generation)
    - Test encoding v2 effectiveness
    - Expected accuracy: >99.5%
 

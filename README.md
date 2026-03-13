@@ -1,11 +1,17 @@
 # Neural Chess Tablebase Compression
 
-> Compressing chess endgame tablebases by 273x using neural networks with geometric encoding
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
+[![Compression](https://img.shields.io/badge/compression-79.7x-green.svg)](https://github.com/mcarbonell/neural-tablebases)
+[![Accuracy](https://img.shields.io/badge/accuracy-99.93%25-brightgreen.svg)](https://github.com/mcarbonell/neural-tablebases)
+
+> Compressing chess endgame tablebases by 80x using neural networks with geometric encoding
 
 ## 🎯 Quick Results
 
 - **99.93% average accuracy** on 3-piece endgames
-- **273x compression ratio** (956 MB → 3.5 MB estimated)
+- **79.7x compression ratio** (956 MB → 12 MB with exception maps)
 - **Fast convergence:** 98%+ accuracy in 1 epoch
 - **Universal approach:** No endgame-specific rules
 
@@ -18,13 +24,13 @@
 | KQvK | 368,452 | 99.92% | ✅ Complete |
 | KRvK | 399,112 | 99.99% | ✅ Complete |
 | KPvK | 331,352 | 99.89% | ✅ Complete |
-| KRRvK | ~24M | TBD | 🔄 Generating (54%) |
+| KRRvK | ~24M | TBD | 🔄 Generating (82%) |
 
 ### In Progress
 
-- **KRRvK dataset generation:** 54% complete (~7 hours remaining)
-- **Encoding v2:** Implemented with piece-specific move distance
-- **Next:** KRvKP (asymmetric, pawn endgame)
+- **KRRvK dataset generation:** 82% complete (~2.5 hours remaining)
+- **Parallel generation:** Implemented (6-7x speedup for future endgames)
+- **Next:** Train KRRvK, then generate KRvKP using parallel version
 
 ## 🚀 Quick Start
 
