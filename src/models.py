@@ -71,7 +71,8 @@ class SIREN(nn.Module):
         return wdl_logits, dtz_val
 
 
-def get_model_for_endgame(model_type: str, num_pieces: int, num_wdl_classes: int = 3, use_relative_encoding: bool = False):
+def get_model_for_endgame(model_type: str, num_pieces: int, num_wdl_classes: int = 3, 
+                          use_relative_encoding: bool = False, input_size: int = None):
     """
     Returns an appropriate model for the given endgame configuration.
     
@@ -80,20 +81,22 @@ def get_model_for_endgame(model_type: str, num_pieces: int, num_wdl_classes: int
         num_pieces: Number of pieces in the endgame (e.g., 3 for KQvK)
         num_wdl_classes: Number of WDL classes (default: 3 for -2, 0, 2)
         use_relative_encoding: If True, uses relative encoding dimensions
+        input_size: Explicit input size (if None, calculated from num_pieces)
     
     Returns:
         Model instance with appropriate architecture
     """
-    if use_relative_encoding:
-        # Relative encoding: num_pieces*10 + num_pairs*4 + 1
-        # For 3 pieces: 3*10 + 3*4 + 1 = 43
-        # For 4 pieces: 4*10 + 6*4 + 1 = 65
-        # For 5 pieces: 5*10 + 10*4 + 1 = 91
-        num_pairs = (num_pieces * (num_pieces - 1)) // 2
-        input_size = num_pieces * 10 + num_pairs * 4 + 1
-    else:
-        # Compact encoding: num_pieces * 64 dimensions
-        input_size = num_pieces * 64
+    if input_size is None:
+        if use_relative_encoding:
+            # Relative encoding v1: num_pieces*10 + num_pairs*4 + 1
+            # For 3 pieces: 3*10 + 3*4 + 1 = 43
+            # For 4 pieces: 4*10 + 6*4 + 1 = 65
+            # For 5 pieces: 5*10 + 10*4 + 1 = 91
+            num_pairs = (num_pieces * (num_pieces - 1)) // 2
+            input_size = num_pieces * 10 + num_pairs * 4 + 1
+        else:
+            # Compact encoding: num_pieces * 64 dimensions
+            input_size = num_pieces * 64
     
     if model_type == "mlp":
         # Much larger models for aggressive overfitting

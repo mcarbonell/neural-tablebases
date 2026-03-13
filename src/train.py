@@ -17,11 +17,31 @@ class TablebaseDataset(Dataset):
         self.x = torch.from_numpy(data['x']).float()
         
         # Map WDL to 3 classes: {-2 -> 0, 0 -> 1, 2 -> 2}
+        # Map WDL values to class indices
+        # For 3 classes: -2 → 0 (Loss), 0 → 1 (Draw), 2 → 2 (Win)
+        # For 5 classes: -2 → 0 (Loss), -1 → 1 (Blessed loss), 0 → 2 (Draw), 1 → 3 (Cursed win), 2 → 4 (Win)
         wdl_raw = data['wdl']
-        wdl_mapped = np.zeros_like(wdl_raw)
-        wdl_mapped[wdl_raw == -2] = 0  # Loss
-        wdl_mapped[wdl_raw == 0] = 1   # Draw
-        wdl_mapped[wdl_raw == 2] = 2   # Win
+        
+        # Detect if we have 5-class data (contains -1 or 1)
+        unique_wdl = np.unique(wdl_raw)
+        has_cursed_blessed = np.any(np.isin(unique_wdl, [-1, 1]))
+        
+        if has_cursed_blessed:
+            # 5-class mapping
+            wdl_mapped = np.zeros_like(wdl_raw)
+            wdl_mapped[wdl_raw == -2] = 0  # Loss
+            wdl_mapped[wdl_raw == -1] = 1  # Blessed loss
+            wdl_mapped[wdl_raw == 0] = 2   # Draw
+            wdl_mapped[wdl_raw == 1] = 3   # Cursed win
+            wdl_mapped[wdl_raw == 2] = 4   # Win
+            self.num_wdl_classes = 5
+        else:
+            # 3-class mapping (standard)
+            wdl_mapped = np.zeros_like(wdl_raw)
+            wdl_mapped[wdl_raw == -2] = 0  # Loss
+            wdl_mapped[wdl_raw == 0] = 1   # Draw
+            wdl_mapped[wdl_raw == 2] = 2   # Win
+            self.num_wdl_classes = 3
         
         self.wdl = torch.from_numpy(wdl_mapped).long()
         self.dtz = torch.from_numpy(data['dtz']).float()
@@ -71,7 +91,15 @@ class TablebaseDataset(Dataset):
         encoding_type = f"relative/geometric v{self.encoding_version}" if self.use_relative_encoding else "compact one-hot"
         print(f"Dataset loaded: {len(self.x)} positions.")
         print(f"Input size: {self.input_size} ({self.num_pieces} pieces, {encoding_type} encoding)")
-        print(f"WDL distribution: Loss={counts[0]}, Draw={counts[1]}, Win={counts[2]}")
+        
+        if self.num_wdl_classes == 5:
+            print(f"WDL distribution (5 classes): Loss={counts[0]}, Blessed={counts[1] if len(counts) > 1 else 0}, "
+                  f"Draw={counts[2] if len(counts) > 2 else 0}, Cursed={counts[3] if len(counts) > 3 else 0}, "
+                  f"Win={counts[4] if len(counts) > 4 else 0}")
+        else:
+            print(f"WDL distribution (3 classes): Loss={counts[0]}, Draw={counts[1] if len(counts) > 1 else 0}, "
+                  f"Win={counts[2] if len(counts) > 2 else 0}")
+        
         print(f"Class weights: {self.class_weights.numpy()}")
 
     def __len__(self):
@@ -104,9 +132,12 @@ def train(args):
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
 
-    # Use adaptive model based on endgame complexity (3 classes)
-    model = get_model_for_endgame(args.model, dataset.num_pieces, num_wdl_classes=3, 
-                                   use_relative_encoding=dataset.use_relative_encoding).to(device)
+    # Use adaptive model based on endgame complexity
+    # Use dataset's detected WDL classes if available, otherwise use args
+    num_wdl_classes = getattr(dataset, 'num_wdl_classes', args.wdl_classes)
+    model = get_model_for_endgame(args.model, dataset.num_pieces, num_wdl_classes=num_wdl_classes, 
+                                   use_relative_encoding=dataset.use_relative_encoding,
+                                   input_size=dataset.input_size).to(device)
     log(f"Model architecture: {model}")
     log(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
@@ -126,6 +157,7 @@ def train(args):
 
     best_val_acc = 0.0
     best_val_loss = float('inf')
+    best_dtz_mae = float('inf')
     best_model_state = None
     patience_counter = 0
     
@@ -139,6 +171,8 @@ def train(args):
         model.train()
         total_loss = 0
         correct_wdl = 0
+        total_dtz_mae = 0
+        total_dtz_samples = 0
         epoch_hard_examples = 0
         
         for batch_idx, (x, wdl, dtz) in enumerate(train_loader):
@@ -169,8 +203,15 @@ def train(args):
                             'dtz': dtz[idx].cpu()
                         })
             
-            # Combined loss: WDL + DTZ
-            loss = (loss_wdl * weights).mean() + 0.1 * criterion_dtz(dtz_pred.squeeze(), dtz)
+            # Combined loss: WDL + DTZ (increased DTZ weight)
+            loss_dtz = criterion_dtz(dtz_pred.squeeze(), dtz.float())
+            loss = (loss_wdl * weights).mean() + 0.5 * loss_dtz
+            
+            # Track DTZ metrics
+            with torch.no_grad():
+                dtz_mae = torch.abs(dtz_pred.squeeze() - dtz.float()).mean()
+                total_dtz_mae += dtz_mae.item() * len(dtz)
+                total_dtz_samples += len(dtz)
             
             loss.backward()
             # Gradient clipping for stability
@@ -186,26 +227,37 @@ def train(args):
         model.eval()
         val_correct = 0
         val_loss = 0
+        val_dtz_mae = 0
+        val_dtz_samples = 0
         with torch.no_grad():
             for x, wdl, dtz in val_loader:
                 x, wdl, dtz = x.to(device), wdl.to(device), dtz.to(device)
                 wdl_logits, dtz_pred = model(x)
                 val_correct += (wdl_logits.argmax(1) == wdl).sum().item()
                 val_loss += criterion_wdl(wdl_logits, wdl).mean().item()
+                
+                # Track DTZ metrics
+                dtz_mae = torch.abs(dtz_pred.squeeze() - dtz.float()).mean()
+                val_dtz_mae += dtz_mae.item() * len(dtz)
+                val_dtz_samples += len(dtz)
 
         val_acc = val_correct / val_size
         val_loss_avg = val_loss / len(val_loader)
+        train_dtz_mae = total_dtz_mae / total_dtz_samples
+        val_dtz_mae_avg = val_dtz_mae / val_dtz_samples
         epoch_duration = time.time() - epoch_start_time
         
         log(f"Epoch {epoch+1}/{args.epochs} - Time: {epoch_duration:.2f}s - "
             f"Train Loss: {total_loss/len(train_loader):.4f} - Val Loss: {val_loss_avg:.4f} - "
             f"Train Acc: {correct_wdl/train_size:.4f} - Val Acc: {val_acc:.4f} - "
+            f"Train DTZ MAE: {train_dtz_mae:.2f} - Val DTZ MAE: {val_dtz_mae_avg:.2f} - "
             f"LR: {optimizer.param_groups[0]['lr']:.6f} - Hard Examples: {epoch_hard_examples}")
 
         # Save Best Model (based on val_loss for better generalization)
         if val_loss_avg < best_val_loss:
             best_val_loss = val_loss_avg
             best_val_acc = val_acc
+            best_dtz_mae = val_dtz_mae_avg
             best_model_state = model.state_dict().copy()
             save_path = os.path.join("data", f"{args.model}_best.pth")
             torch.save(model.state_dict(), save_path)
@@ -241,7 +293,7 @@ def train(args):
             for _ in range(args.hard_mining_epochs):
                 hard_optimizer.zero_grad()
                 wdl_logits, dtz_pred = model(hard_x)
-                loss = criterion_wdl(wdl_logits, hard_wdl).mean() + 0.1 * criterion_dtz(dtz_pred.squeeze(), hard_dtz)
+                loss = criterion_wdl(wdl_logits, hard_wdl).mean() + 0.5 * criterion_dtz(dtz_pred.squeeze(), hard_dtz.float())
                 loss.backward()
                 hard_optimizer.step()
             
@@ -256,6 +308,7 @@ def train(args):
     log(f"Total hard examples processed: {hard_examples_count}")
     log(f"Best validation accuracy: {best_val_acc:.4f}")
     log(f"Best validation loss: {best_val_loss:.4f}")
+    log(f"Best validation DTZ MAE: {best_dtz_mae:.2f}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -266,6 +319,8 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--patience", type=int, default=50,
                         help="Early stopping patience (epochs without improvement)")
+    parser.add_argument("--wdl_classes", type=int, default=3, choices=[3, 5],
+                        help="Number of WDL classes: 3 (standard) or 5 (with cursed/blessed)")
     parser.add_argument("--hard_weight", type=float, default=2.0,
                         help="Weight multiplier for hard examples (reduced from 5.0)")
     parser.add_argument("--hard_mining", action="store_true", default=True,

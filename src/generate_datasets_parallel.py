@@ -248,6 +248,7 @@ def generate_dataset_parallel(syzygy_path: str, output_dir: str, config: str,
             all_positions.append(data['x'])
             all_wdl.append(data['wdl'])
             all_dtz.append(data['dtz'])
+            data.close()  # Close file before removing
             os.remove(chunk_file)
     
     # Concatenate
