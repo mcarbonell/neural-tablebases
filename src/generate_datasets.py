@@ -21,7 +21,7 @@ def get_material_config(board: chess.Board) -> str:
     
     return f"{''.join(white_pieces)}v{''.join(black_pieces)}"
 
-def encode_board(board: chess.Board, compact: bool = True, relative: bool = False) -> np.ndarray:
+def encode_board(board: chess.Board, compact: bool = True, relative: bool = False, use_move_distance: bool = False) -> np.ndarray:
     """
     Encodes the board into a flat array.
     
@@ -30,13 +30,14 @@ def encode_board(board: chess.Board, compact: bool = True, relative: bool = Fals
         compact: If True, uses compact encoding (only pieces present).
                  If False, uses full 768-dim encoding (12 pieces * 64 squares).
         relative: If True, uses relative/geometric encoding (RECOMMENDED).
+        use_move_distance: If True, adds piece-specific move distance (encoding v2).
     
     Returns:
         numpy array with encoding
     """
     if relative:
         # Relative encoding: geometric features + piece info
-        return encode_board_relative(board)
+        return encode_board_relative(board, use_move_distance=use_move_distance)
     
     if not compact:
         # Full encoding: 768 dimensions (12 pieces * 64 squares)
@@ -72,7 +73,77 @@ def encode_board(board: chess.Board, compact: bool = True, relative: bool = Fals
     
     return encoding
 
-def encode_board_relative(board: chess.Board) -> np.ndarray:
+def piece_move_distance(piece_type: int, from_sq: int, to_sq: int) -> float:
+    """
+    Calculate minimum number of moves for a piece to reach a square.
+    
+    Returns:
+        float: Number of moves (normalized), or 10.0 if impossible
+    """
+    r1 = chess.square_rank(from_sq)
+    c1 = chess.square_file(from_sq)
+    r2 = chess.square_rank(to_sq)
+    c2 = chess.square_file(to_sq)
+    
+    dx = abs(c2 - c1)
+    dy = abs(r2 - r1)
+    
+    if piece_type == chess.KING:
+        # King: Chebyshev distance
+        return max(dx, dy)
+    
+    elif piece_type == chess.QUEEN:
+        # Queen: 1 if on same rank/file/diagonal, 2 otherwise
+        if dx == 0 or dy == 0 or dx == dy:
+            return 1.0
+        else:
+            return 2.0
+    
+    elif piece_type == chess.ROOK:
+        # Rook: 1 if same rank/file, 2 otherwise
+        if dx == 0 or dy == 0:
+            return 1.0
+        else:
+            return 2.0
+    
+    elif piece_type == chess.BISHOP:
+        # Bishop: only moves on same color squares
+        if (r1 + c1) % 2 != (r2 + c2) % 2:
+            return 10.0  # Impossible (different color)
+        elif dx == dy:
+            return 1.0  # Same diagonal
+        else:
+            return 2.0  # Different diagonal, needs 2 moves
+    
+    elif piece_type == chess.KNIGHT:
+        # Knight: special case distances
+        if dx == 0 and dy == 0:
+            return 0.0
+        elif (dx == 1 and dy == 2) or (dx == 2 and dy == 1):
+            return 1.0  # One knight move
+        elif dx + dy == 1:
+            return 3.0  # Adjacent square (worst case for knight)
+        elif dx == 2 and dy == 2:
+            return 2.0  # 2x2 diagonal
+        else:
+            # Approximate: max dimension / 2, rounded up
+            return max(2.0, (max(dx, dy) + 1) // 2)
+    
+    elif piece_type == chess.PAWN:
+        # Pawn: only moves forward (simplified - doesn't account for captures)
+        # For white pawn: dy should be positive
+        # For black pawn: dy should be negative
+        # Since we don't know color here, use absolute dy
+        if dx == 0 and dy > 0:
+            return dy  # Can advance
+        elif dx <= 1 and dy > 0:
+            return dy  # Can capture diagonally (approximate)
+        else:
+            return 10.0  # Can't reach (wrong direction or too far sideways)
+    
+    return 10.0  # Unknown piece type
+
+def encode_board_relative(board: chess.Board, use_move_distance: bool = False) -> np.ndarray:
     """
     Relative/geometric encoding that scales to any endgame.
     
@@ -84,14 +155,21 @@ def encode_board_relative(board: chess.Board) -> np.ndarray:
     For each pair of pieces:
         - Manhattan distance (normalized): 1 dim
         - Chebyshev distance (normalized): 1 dim
+        - Move distance (piece-specific, optional): 1 dim
         - Direction vector (dx, dy): 2 dims
     
     Global:
         - Side to move: 1 dim
     
-    Total for 3 pieces: 3*10 + 3*4 + 1 = 43 dims
-    Total for 4 pieces: 4*10 + 6*4 + 1 = 65 dims
-    Total for 5 pieces: 5*10 + 10*4 + 1 = 91 dims
+    Without move_distance:
+        Total for 3 pieces: 3*10 + 3*4 + 1 = 43 dims
+        Total for 4 pieces: 4*10 + 6*4 + 1 = 65 dims
+        Total for 5 pieces: 5*10 + 10*4 + 1 = 91 dims
+    
+    With move_distance:
+        Total for 3 pieces: 3*10 + 3*5 + 1 = 46 dims
+        Total for 4 pieces: 4*10 + 6*5 + 1 = 71 dims
+        Total for 5 pieces: 5*10 + 10*5 + 1 = 101 dims
     """
     # Collect pieces
     pieces_on_board = []
@@ -136,7 +214,9 @@ def encode_board_relative(board: chess.Board) -> np.ndarray:
     num_pieces = len(pieces_on_board)
     for i in range(num_pieces):
         for j in range(i + 1, num_pieces):
+            piece1 = pieces_on_board[i][0]
             sq1 = pieces_on_board[i][1]
+            piece2 = pieces_on_board[j][0]
             sq2 = pieces_on_board[j][1]
             
             r1 = chess.square_rank(sq1)
@@ -154,14 +234,24 @@ def encode_board_relative(board: chess.Board) -> np.ndarray:
             dx = (c2 - c1) / 7.0
             dy = (r2 - r1) / 7.0
             
-            encoding.extend([manhattan, chebyshev, dx, dy])
+            # Build feature list
+            features = [manhattan, chebyshev]
+            
+            # Move distance (piece-specific, optional)
+            if use_move_distance:
+                move_dist = piece_move_distance(piece1.piece_type, sq1, sq2)
+                move_dist_normalized = min(move_dist, 10.0) / 10.0  # Cap at 10, normalize
+                features.append(move_dist_normalized)
+            
+            features.extend([dx, dy])
+            encoding.extend(features)
     
     # 3. Side to move
     encoding.append(1.0 if board.turn == chess.WHITE else 0.0)
     
     return np.array(encoding, dtype=np.float32)
 
-def generate_3piece_dataset(syzygy_path: str, output_dir: str, config: str, compact: bool = True, relative: bool = False):
+def generate_3piece_dataset(syzygy_path: str, output_dir: str, config: str, compact: bool = True, relative: bool = False, use_move_distance: bool = False):
     """
     Generates a dataset for a specific 3-piece endgame.
     Example configs: 'KQK', 'KRK', 'KPK'
@@ -172,6 +262,7 @@ def generate_3piece_dataset(syzygy_path: str, output_dir: str, config: str, comp
         config: Endgame configuration (e.g., 'KQvK')
         compact: If True, uses compact encoding (only pieces present)
         relative: If True, uses relative/geometric encoding (RECOMMENDED)
+        use_move_distance: If True, adds piece-specific move distance (encoding v2)
     """
     if not os.path.exists(syzygy_path):
         raise ValueError(f"Syzygy path {syzygy_path} not found.")
@@ -245,7 +336,7 @@ def generate_3piece_dataset(syzygy_path: str, output_dir: str, config: str, comp
                     dtz = tablebase.probe_dtz(board)
                     
                     # Store encoded board and labels
-                    positions.append(encode_board(board, compact=compact, relative=relative))
+                    positions.append(encode_board(board, compact=compact, relative=relative, use_move_distance=use_move_distance))
                     labels_wdl.append(wdl)
                     labels_dtz.append(dtz)
                     valid_count += 1
@@ -277,8 +368,11 @@ if __name__ == "__main__":
                         help="Use full 768-dim encoding (12 pieces * 64 squares)")
     parser.add_argument("--relative", action="store_true",
                         help="Use relative/geometric encoding (RECOMMENDED for better accuracy)")
+    parser.add_argument("--move-distance", action="store_true",
+                        help="Add piece-specific move distance to encoding (v2, experimental)")
     args = parser.parse_args()
     
     # --full flag overrides --compact
     compact = not args.full
-    generate_3piece_dataset(args.syzygy, args.data, args.config, compact=compact, relative=args.relative)
+    generate_3piece_dataset(args.syzygy, args.data, args.config, compact=compact, 
+                           relative=args.relative, use_move_distance=args.move_distance)

@@ -30,28 +30,45 @@ class TablebaseDataset(Dataset):
         self.input_size = self.x.shape[1]
         
         # Detect encoding type
-        # Relative encoding: 43 dims for 3 pieces, 65 for 4, 91 for 5
+        # Relative encoding v1: 43 dims for 3 pieces, 65 for 4, 91 for 5
+        # Relative encoding v2: 46 dims for 3 pieces, 71 for 4, 101 for 5
         # Compact encoding: 192 dims for 3 pieces, 256 for 4, 320 for 5
         if self.input_size == 43:
             self.num_pieces = 3
             self.use_relative_encoding = True
+            self.encoding_version = 1
+        elif self.input_size == 46:
+            self.num_pieces = 3
+            self.use_relative_encoding = True
+            self.encoding_version = 2
         elif self.input_size == 65:
             self.num_pieces = 4
             self.use_relative_encoding = True
+            self.encoding_version = 1
+        elif self.input_size == 71:
+            self.num_pieces = 4
+            self.use_relative_encoding = True
+            self.encoding_version = 2
         elif self.input_size == 91:
             self.num_pieces = 5
             self.use_relative_encoding = True
+            self.encoding_version = 1
+        elif self.input_size == 101:
+            self.num_pieces = 5
+            self.use_relative_encoding = True
+            self.encoding_version = 2
         else:
             # Compact encoding: num_pieces * 64
             self.num_pieces = self.input_size // 64
             self.use_relative_encoding = False
+            self.encoding_version = 0
         
         # Calculate class weights for balanced training
         unique, counts = np.unique(wdl_mapped, return_counts=True)
         total = len(wdl_mapped)
         self.class_weights = torch.FloatTensor([total / (len(unique) * c) for c in counts])
         
-        encoding_type = "relative/geometric" if self.use_relative_encoding else "compact one-hot"
+        encoding_type = f"relative/geometric v{self.encoding_version}" if self.use_relative_encoding else "compact one-hot"
         print(f"Dataset loaded: {len(self.x)} positions.")
         print(f"Input size: {self.input_size} ({self.num_pieces} pieces, {encoding_type} encoding)")
         print(f"WDL distribution: Loss={counts[0]}, Draw={counts[1]}, Win={counts[2]}")
