@@ -143,6 +143,85 @@ def piece_move_distance(piece_type: int, from_sq: int, to_sq: int) -> float:
     
     return 10.0  # Unknown piece type
 
+def piece_pair_distance(piece1_type: int, piece1_color: bool, piece2_type: int, piece2_color: bool, 
+                        from_sq: int, to_sq: int) -> tuple:
+    """
+    Calculate distance between two pieces considering:
+    1. Types of both pieces
+    2. Whether they are allies or enemies
+    3. Importance of the specific pair
+    
+    Returns:
+        tuple: (distance, pair_type_features)
+        - distance: normalized move distance (0-1)
+        - pair_type_features: list of features about the pair relationship
+    """
+    r1 = chess.square_rank(from_sq)
+    c1 = chess.square_file(from_sq)
+    r2 = chess.square_rank(to_sq)
+    c2 = chess.square_file(to_sq)
+    
+    dx = abs(c2 - c1)
+    dy = abs(r2 - r1)
+    
+    # Calculate basic move distance from piece1 to piece2's square
+    move_dist = piece_move_distance(piece1_type, from_sq, to_sq)
+    move_dist_normalized = min(move_dist, 10.0) / 10.0
+    
+    # Features about the pair relationship
+    pair_features = []
+    
+    # 1. Are they the same color? (allies vs enemies)
+    same_color = (piece1_color == piece2_color)
+    pair_features.append(1.0 if same_color else 0.0)
+    
+    # 2. Specific pair types (most important for chess)
+    
+    # King-King pair (critical for endgames)
+    is_king_king = (piece1_type == chess.KING and piece2_type == chess.KING)
+    pair_features.append(1.0 if is_king_king else 0.0)
+    
+    # King-Enemy piece (king attacking enemy piece)
+    is_king_enemy = (piece1_type == chess.KING and not same_color)
+    pair_features.append(1.0 if is_king_enemy else 0.0)
+    
+    # Ally piece-Enemy king (piece attacking enemy king)
+    is_ally_king = (piece2_type == chess.KING and same_color)
+    pair_features.append(1.0 if is_ally_king else 0.0)
+    
+    # Enemy piece-Enemy king (enemy piece defending enemy king)
+    is_enemy_king = (piece2_type == chess.KING and not same_color)
+    pair_features.append(1.0 if is_enemy_king else 0.0)
+    
+    # Same piece type (for comparison)
+    same_piece_type = (piece1_type == piece2_type)
+    pair_features.append(1.0 if same_piece_type else 0.0)
+    
+    # 3. Weighted distance based on pair importance
+    # Different pairs have different importance in chess
+    
+    if is_king_king:
+        # King-king distance is critical for opposition and mating
+        # In endgames, king distance determines who controls key squares
+        weighted_dist = move_dist_normalized * 2.0  # Double importance
+    elif is_king_enemy:
+        # King attacking enemy piece - important for captures
+        weighted_dist = move_dist_normalized * 1.5
+    elif is_enemy_king:
+        # Distance to enemy king - important for attack/defense
+        weighted_dist = move_dist_normalized * 1.5
+    elif not same_color:
+        # Enemy pieces - generally more important than allies
+        weighted_dist = move_dist_normalized * 1.2
+    else:
+        # Ally pieces - less important
+        weighted_dist = move_dist_normalized * 0.8
+    
+    # Cap at 1.0
+    weighted_dist = min(weighted_dist, 1.0)
+    
+    return weighted_dist, pair_features
+
 def encode_board_relative(board: chess.Board, use_move_distance: bool = False) -> np.ndarray:
     """
     Relative/geometric encoding that scales to any endgame.
@@ -155,8 +234,10 @@ def encode_board_relative(board: chess.Board, use_move_distance: bool = False) -
     For each pair of pieces:
         - Manhattan distance (normalized): 1 dim
         - Chebyshev distance (normalized): 1 dim
-        - Move distance (piece-specific, optional): 1 dim
         - Direction vector (dx, dy): 2 dims
+        - If use_move_distance=True:
+            * Weighted move distance (considering both piece types): 1 dim
+            * Pair relationship features (same_color, king_king, etc.): 6 dims
     
     Global:
         - Side to move: 1 dim
@@ -166,10 +247,10 @@ def encode_board_relative(board: chess.Board, use_move_distance: bool = False) -
         Total for 4 pieces: 4*10 + 6*4 + 1 = 65 dims
         Total for 5 pieces: 5*10 + 10*4 + 1 = 91 dims
     
-    With move_distance:
-        Total for 3 pieces: 3*10 + 3*5 + 1 = 46 dims
-        Total for 4 pieces: 4*10 + 6*5 + 1 = 71 dims
-        Total for 5 pieces: 5*10 + 10*5 + 1 = 101 dims
+    With move_distance (v2 fixed):
+        Total for 3 pieces: 3*10 + 3*(4+1+6) + 1 = 3*10 + 3*11 + 1 = 64 dims
+        Total for 4 pieces: 4*10 + 6*(4+1+6) + 1 = 4*10 + 6*11 + 1 = 107 dims
+        Total for 5 pieces: 5*10 + 10*(4+1+6) + 1 = 5*10 + 10*11 + 1 = 161 dims
     """
     # Collect pieces
     pieces_on_board = []
@@ -235,15 +316,20 @@ def encode_board_relative(board: chess.Board, use_move_distance: bool = False) -
             dy = (r2 - r1) / 7.0
             
             # Build feature list
-            features = [manhattan, chebyshev]
+            features = [manhattan, chebyshev, dx, dy]  # Always include direction vectors
             
             # Move distance (piece-specific, optional)
             if use_move_distance:
-                move_dist = piece_move_distance(piece1.piece_type, sq1, sq2)
-                move_dist_normalized = min(move_dist, 10.0) / 10.0  # Cap at 10, normalize
-                features.append(move_dist_normalized)
+                # Use new piece_pair_distance that considers both pieces
+                weighted_dist, pair_features = piece_pair_distance(
+                    piece1.piece_type, piece1.color,
+                    piece2.piece_type, piece2.color,
+                    sq1, sq2
+                )
+                features.append(weighted_dist)
+                # Add pair relationship features
+                features.extend(pair_features)
             
-            features.extend([dx, dy])
             encoding.extend(features)
     
     # 3. Side to move

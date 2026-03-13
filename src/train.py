@@ -51,7 +51,8 @@ class TablebaseDataset(Dataset):
         
         # Detect encoding type
         # Relative encoding v1: 43 dims for 3 pieces, 65 for 4, 91 for 5
-        # Relative encoding v2: 46 dims for 3 pieces, 71 for 4, 101 for 5
+        # Relative encoding v2 (old): 46 dims for 3 pieces, 71 for 4, 101 for 5
+        # Relative encoding v2 (fixed): 64 dims for 3 pieces, 107 for 4, 161 for 5
         # Compact encoding: 192 dims for 3 pieces, 256 for 4, 320 for 5
         if self.input_size == 43:
             self.num_pieces = 3
@@ -60,7 +61,11 @@ class TablebaseDataset(Dataset):
         elif self.input_size == 46:
             self.num_pieces = 3
             self.use_relative_encoding = True
-            self.encoding_version = 2
+            self.encoding_version = 2  # Old v2
+        elif self.input_size == 64:
+            self.num_pieces = 3
+            self.use_relative_encoding = True
+            self.encoding_version = 3  # Fixed v2 (v2.1)
         elif self.input_size == 65:
             self.num_pieces = 4
             self.use_relative_encoding = True
@@ -68,7 +73,11 @@ class TablebaseDataset(Dataset):
         elif self.input_size == 71:
             self.num_pieces = 4
             self.use_relative_encoding = True
-            self.encoding_version = 2
+            self.encoding_version = 2  # Old v2
+        elif self.input_size == 107:
+            self.num_pieces = 4
+            self.use_relative_encoding = True
+            self.encoding_version = 3  # Fixed v2 (v2.1)
         elif self.input_size == 91:
             self.num_pieces = 5
             self.use_relative_encoding = True
@@ -76,7 +85,11 @@ class TablebaseDataset(Dataset):
         elif self.input_size == 101:
             self.num_pieces = 5
             self.use_relative_encoding = True
-            self.encoding_version = 2
+            self.encoding_version = 2  # Old v2
+        elif self.input_size == 161:
+            self.num_pieces = 5
+            self.use_relative_encoding = True
+            self.encoding_version = 3  # Fixed v2 (v2.1)
         else:
             # Compact encoding: num_pieces * 64
             self.num_pieces = self.input_size // 64

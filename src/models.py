@@ -88,12 +88,11 @@ def get_model_for_endgame(model_type: str, num_pieces: int, num_wdl_classes: int
     """
     if input_size is None:
         if use_relative_encoding:
-            # Relative encoding v1: num_pieces*10 + num_pairs*4 + 1
-            # For 3 pieces: 3*10 + 3*4 + 1 = 43
-            # For 4 pieces: 4*10 + 6*4 + 1 = 65
-            # For 5 pieces: 5*10 + 10*4 + 1 = 91
+            # Relative encoding dimensions depend on version
+            # We need encoding_version parameter, but it's not passed
+            # For now, use v1 dimensions (will be overridden by actual input_size)
             num_pairs = (num_pieces * (num_pieces - 1)) // 2
-            input_size = num_pieces * 10 + num_pairs * 4 + 1
+            input_size = num_pieces * 10 + num_pairs * 4 + 1  # v1 dimensions
         else:
             # Compact encoding: num_pieces * 64 dimensions
             input_size = num_pieces * 64

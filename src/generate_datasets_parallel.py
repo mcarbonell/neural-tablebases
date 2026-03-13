@@ -66,7 +66,7 @@ def process_chunk(args):
     Process a chunk of square combinations.
     Returns (chunk_id, positions, wdl_labels, dtz_labels).
     """
-    chunk_id, syzygy_path, all_pieces, start_idx, count, compact, relative, use_move_distance = args
+    chunk_id, syzygy_path, all_pieces, start_idx, count, compact, relative, use_move_distance, canonical = args
     
     try:
         # Open tablebase in this process
@@ -80,6 +80,9 @@ def process_chunk(args):
         
         # Generate square combinations for this chunk
         combinations = generate_square_combinations(num_pieces, start_idx, count)
+        
+        # Cache for canonical forms (within this chunk)
+        canonical_cache = {}
         
         for squares in combinations:
             board = chess.Board(None)
@@ -113,6 +116,31 @@ def process_chunk(args):
                         encoding = encode_board(board, compact=compact, relative=relative, 
                                               use_move_distance=use_move_distance)
                         
+                        # Apply canonical forms if requested
+                        if canonical:
+                            try:
+                                # Get canonical key for this board
+                                from canonical_forms import find_canonical_form, board_to_encoding_key
+                                
+                                def encoding_func(board):
+                                    return encode_board(board, compact=compact, relative=relative,
+                                                       use_move_distance=use_move_distance)
+                                
+                                canonical_board, _ = find_canonical_form(board, encoding_func)
+                                canonical_key = board_to_encoding_key(canonical_board, encoding_func)
+                                
+                                # Check if we've already seen this canonical form in this chunk
+                                if canonical_key in canonical_cache:
+                                    continue  # Skip duplicate canonical form
+                                
+                                # Store canonical key and use canonical board encoding
+                                canonical_cache[canonical_key] = True
+                                encoding = encode_board(canonical_board, compact=compact, relative=relative,
+                                                       use_move_distance=use_move_distance)
+                            except ImportError:
+                                print(f"Warning: canonical_forms module not found. Skipping canonical forms.")
+                                canonical = False
+                        
                         positions.append(encoding)
                         labels_wdl.append(wdl)
                         labels_dtz.append(dtz)
@@ -132,8 +160,8 @@ def process_chunk(args):
 
 def generate_dataset_parallel(syzygy_path: str, output_dir: str, config: str, 
                               compact: bool = True, relative: bool = False, 
-                              use_move_distance: bool = False, num_workers: int = None,
-                              chunk_size: int = 10000):
+                              use_move_distance: bool = False, canonical: bool = False,
+                              num_workers: int = None, chunk_size: int = 10000):
     """
     Generate dataset using parallel processing with incremental disk writing.
     
@@ -144,6 +172,7 @@ def generate_dataset_parallel(syzygy_path: str, output_dir: str, config: str,
         compact: Use compact encoding
         relative: Use relative encoding
         use_move_distance: Use move distance (v2)
+        canonical: Use canonical forms (reduce dataset via board symmetries)
         num_workers: Number of parallel workers (default: CPU count)
         chunk_size: Number of combinations per chunk (default: 10000)
     """
@@ -186,6 +215,7 @@ def generate_dataset_parallel(syzygy_path: str, output_dir: str, config: str,
     print(f"  Workers: {num_workers}")
     print(f"  Total combinations: {total_combinations:,}")
     print(f"  Chunk size: {chunk_size:,}")
+    print(f"  Canonical forms: {'Yes (8 symmetries)' if canonical else 'No'}")
     
     # Create chunks
     num_chunks = (total_combinations + chunk_size - 1) // chunk_size
@@ -196,7 +226,7 @@ def generate_dataset_parallel(syzygy_path: str, output_dir: str, config: str,
         start_idx = i * chunk_size
         count = min(chunk_size, total_combinations - start_idx)
         chunks.append((i, syzygy_path, all_pieces, start_idx, count,
-                      compact, relative, use_move_distance))
+                      compact, relative, use_move_distance, canonical))
     
     print(f"\nProcessing with incremental disk writing...")
     
@@ -263,7 +293,11 @@ def generate_dataset_parallel(syzygy_path: str, output_dir: str, config: str,
     print(f"Found {valid_count:,} valid positions for {config}.")
     
     # Save final dataset
-    output_path = os.path.join(output_dir, f"{config}.npz")
+    if canonical:
+        output_path = os.path.join(output_dir, f"{config}_canonical.npz")
+    else:
+        output_path = os.path.join(output_dir, f"{config}.npz")
+    
     np.savez_compressed(output_path,
                         x=positions,
                         wdl=labels_wdl,
@@ -273,6 +307,14 @@ def generate_dataset_parallel(syzygy_path: str, output_dir: str, config: str,
     print(f"Saved to {output_path}")
     print(f"Total time: {timedelta(seconds=int(total_time))}")
     print(f"Speed: {valid_count / total_time:.0f} positions/second")
+    
+    # Print canonical reduction if applicable
+    if canonical:
+        # Estimate original positions (without canonical)
+        # For 3 pieces: each canonical form represents ~8 symmetric positions
+        estimated_original = valid_count * 8
+        reduction = 1 - valid_count / estimated_original if estimated_original > 0 else 0
+        print(f"Canonical reduction: ~{reduction:.1%} (estimated {valid_count:,} vs {estimated_original:,})")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Parallel dataset generation for neural tablebases")
@@ -290,6 +332,8 @@ if __name__ == "__main__":
                        help="Use relative/geometric encoding")
     parser.add_argument("--move-distance", action="store_true",
                        help="Include piece-specific move distance (encoding v2)")
+    parser.add_argument("--canonical", action="store_true",
+                       help="Use canonical forms (reduce dataset via board symmetries)")
     parser.add_argument("--workers", type=int, default=None,
                        help="Number of parallel workers (default: CPU count, max 8)")
     parser.add_argument("--chunk-size", type=int, default=10000,
@@ -305,5 +349,6 @@ if __name__ == "__main__":
     generate_dataset_parallel(args.syzygy, args.data, args.config, 
                              compact=compact, relative=args.relative,
                              use_move_distance=args.move_distance,
+                             canonical=args.canonical,
                              num_workers=args.workers,
                              chunk_size=args.chunk_size)
