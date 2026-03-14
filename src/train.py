@@ -58,6 +58,10 @@ class TablebaseDataset(Dataset):
             self.num_pieces = 3
             self.use_relative_encoding = True
             self.encoding_version = 1
+        elif self.input_size == 45:
+            self.num_pieces = 3
+            self.use_relative_encoding = True
+            self.encoding_version = 4
         elif self.input_size == 46:
             self.num_pieces = 3
             self.use_relative_encoding = True
@@ -70,6 +74,10 @@ class TablebaseDataset(Dataset):
             self.num_pieces = 4
             self.use_relative_encoding = True
             self.encoding_version = 1
+        elif self.input_size == 68:
+            self.num_pieces = 4
+            self.use_relative_encoding = True
+            self.encoding_version = 4
         elif self.input_size == 71:
             self.num_pieces = 4
             self.use_relative_encoding = True
@@ -82,6 +90,10 @@ class TablebaseDataset(Dataset):
             self.num_pieces = 5
             self.use_relative_encoding = True
             self.encoding_version = 1
+        elif self.input_size == 95:
+            self.num_pieces = 5
+            self.use_relative_encoding = True
+            self.encoding_version = 4
         elif self.input_size == 101:
             self.num_pieces = 5
             self.use_relative_encoding = True
@@ -118,8 +130,43 @@ class TablebaseDataset(Dataset):
     def __len__(self):
         return len(self.x)
 
+    def augment_horizontal_flip(self, x):
+        """
+        Applies horizontal flip to a v4 encoding vector.
+        - Piece col becomes 1 - col
+        - Pair dx becomes -dx
+        """
+        # We need to know where columns and dx's are
+        x_aug = x.clone()
+        num_pieces = self.num_pieces
+        
+        # 1. Flip piece columns
+        # Each piece has 11 dims: [row, col, k, q, r, b, n, p, w, b, progress]
+        for i in range(num_pieces):
+            col_idx = i * 11 + 1
+            x_aug[col_idx] = 1.0 - x_aug[col_idx]
+            
+        # 2. Flip pair dx
+        # Pairs start after pieces (11 * num_pieces)
+        # Each pair has 4 dims: [manhattan, chebyshev, dx, dy]
+        start_pairs = num_pieces * 11
+        num_pairs = (num_pieces * (num_pieces - 1)) // 2
+        for i in range(num_pairs):
+            dx_idx = start_pairs + (i * 4) + 2
+            x_aug[dx_idx] = -x_aug[dx_idx]
+            
+        return x_aug
+
     def __getitem__(self, idx):
-        return self.x[idx], self.wdl[idx], self.dtz[idx]
+        x = self.x[idx]
+        wdl = self.wdl[idx]
+        dtz = self.dtz[idx]
+        
+        # Augmentation: Random horizontal flip for v4
+        if self.encoding_version == 4 and torch.rand(1) > 0.5:
+            x = self.augment_horizontal_flip(x)
+            
+        return x, wdl, dtz
 
 def train(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -272,7 +319,8 @@ def train(args):
             best_val_acc = val_acc
             best_dtz_mae = val_dtz_mae_avg
             best_model_state = model.state_dict().copy()
-            save_path = os.path.join("data", f"{args.model}_best.pth")
+            model_base = args.model_name if args.model_name else args.model
+            save_path = os.path.join("data", f"{model_base}_best.pth")
             torch.save(model.state_dict(), save_path)
             log(f"New best validation loss! Val Loss: {val_loss_avg:.4f}, Val Acc: {val_acc:.4f}. Model saved to {save_path}")
             patience_counter = 0
@@ -286,7 +334,8 @@ def train(args):
 
         # Periodic checkpoint
         if (epoch + 1) % 100 == 0:
-            torch.save(model.state_dict(), os.path.join("data", f"{args.model}_checkpoint_e{epoch+1}.pth"))
+            model_base = args.model_name if args.model_name else args.model
+            torch.save(model.state_dict(), os.path.join("data", f"{model_base}_checkpoint_e{epoch+1}.pth"))
         
         # Update scheduler
         scheduler.step(val_acc)
@@ -315,7 +364,8 @@ def train(args):
             log(f"Overfitting Loop completed")
 
     # Save Final Model
-    save_path = os.path.join("data", f"{args.model}_final.pth")
+    model_base = args.model_name if args.model_name else args.model
+    save_path = os.path.join("data", f"{model_base}_final.pth")
     torch.save(model.state_dict(), save_path)
     log(f"Final model saved to {save_path}")
     log(f"Total hard examples processed: {hard_examples_count}")
@@ -342,5 +392,7 @@ if __name__ == "__main__":
                         help="Frequency of hard example re-training (epochs, increased from 10)")
     parser.add_argument("--hard_mining_epochs", type=int, default=3,
                         help="Number of epochs to train on hard examples (reduced from 5)")
+    parser.add_argument("--model_name", type=str, default=None,
+                        help="Custom name for the model file (defaults to model type)")
     args = parser.parse_args()
     train(args)

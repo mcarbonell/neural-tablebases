@@ -21,6 +21,23 @@ def get_material_config(board: chess.Board) -> str:
     
     return f"{''.join(white_pieces)}v{''.join(black_pieces)}"
 
+def flip_board(board: chess.Board) -> chess.Board:
+    """
+    Returns a board where:
+    - Colors are swapped
+    - Board is flipped vertically
+    - Side to move is flipped
+    This normalizes the perspective so the side to move is always White.
+    """
+    flipped = board.transform(chess.flip_vertical)
+    # After vertical flip, ranks are reversed. 
+    # But piece colors are still the same. We need to swap them.
+    new_board = chess.Board(None)
+    new_board.turn = not flipped.turn
+    for square, piece in flipped.piece_map().items():
+        new_board.set_piece_at(square, chess.Piece(piece.piece_type, not piece.color))
+    return new_board
+
 def encode_board(board: chess.Board, compact: bool = True, relative: bool = False, use_move_distance: bool = False) -> np.ndarray:
     """
     Encodes the board into a flat array.
@@ -38,6 +55,9 @@ def encode_board(board: chess.Board, compact: bool = True, relative: bool = Fals
     if relative:
         # Relative encoding: geometric features + piece info
         return encode_board_relative(board, use_move_distance=use_move_distance)
+    
+    if str(relative).lower() == 'v4':
+        return encode_board_relative(board, version=4)
     
     if not compact:
         # Full encoding: 768 dimensions (12 pieces * 64 squares)
@@ -222,36 +242,20 @@ def piece_pair_distance(piece1_type: int, piece1_color: bool, piece2_type: int, 
     
     return weighted_dist, pair_features
 
-def encode_board_relative(board: chess.Board, use_move_distance: bool = False) -> np.ndarray:
+def encode_board_relative(board: chess.Board, use_move_distance: bool = False, version: int = 1) -> np.ndarray:
     """
     Relative/geometric encoding that scales to any endgame.
     
-    For each piece:
-        - Normalized coordinates (x, y): 2 dims
-        - Piece type one-hot [K,Q,R,B,N,P]: 6 dims
-        - Color [White, Black]: 2 dims
-    
-    For each pair of pieces:
-        - Manhattan distance (normalized): 1 dim
-        - Chebyshev distance (normalized): 1 dim
-        - Direction vector (dx, dy): 2 dims
-        - If use_move_distance=True:
-            * Weighted move distance (considering both piece types): 1 dim
-            * Pair relationship features (same_color, king_king, etc.): 6 dims
-    
-    Global:
-        - Side to move: 1 dim
-    
-    Without move_distance:
-        Total for 3 pieces: 3*10 + 3*4 + 1 = 43 dims
-        Total for 4 pieces: 4*10 + 6*4 + 1 = 65 dims
-        Total for 5 pieces: 5*10 + 10*4 + 1 = 91 dims
-    
-    With move_distance (v2 fixed):
-        Total for 3 pieces: 3*10 + 3*(4+1+6) + 1 = 3*10 + 3*11 + 1 = 64 dims
-        Total for 4 pieces: 4*10 + 6*(4+1+6) + 1 = 4*10 + 6*11 + 1 = 107 dims
-        Total for 5 pieces: 5*10 + 10*(4+1+6) + 1 = 5*10 + 10*11 + 1 = 161 dims
+    Version 4 (New):
+        - Normalized perspective (side to move is always White)
+        - Pawn promotion progress feature
     """
+    if version == 4:
+        # Perspective normalization
+        if board.turn == chess.BLACK:
+            board = flip_board(board)
+        # Now side to move is always WHITE
+        
     # Collect pieces
     pieces_on_board = []
     for square in chess.SQUARES:
@@ -260,6 +264,7 @@ def encode_board_relative(board: chess.Board, use_move_distance: bool = False) -
             pieces_on_board.append((piece, square))
     
     # Sort: White first, then Black; K,Q,R,B,N,P
+    # Since we normalized, White = Side to Move
     pieces_on_board.sort(key=lambda x: (
         0 if x[0].color == chess.WHITE else 1,
         x[0].piece_type
@@ -288,8 +293,18 @@ def encode_board_relative(board: chess.Board, use_move_distance: bool = False) -
         encoding.extend(piece_type_vec)
         
         # Color (one-hot)
+        # In v4, [1, 0] means "STM piece", [0, 1] means "Enemy piece"
         color = [1.0, 0.0] if piece.color == chess.WHITE else [0.0, 1.0]
         encoding.extend(color)
+        
+        if version == 4:
+            # Pawn promotion progress
+            progress = 0.0
+            if piece.piece_type == chess.PAWN:
+                # White pawn rank (normalized 1.0 at promotion rank 7)
+                rank = chess.square_rank(square)
+                progress = rank / 7.0
+            encoding.append(progress)
     
     # 2. Encode pairwise relationships
     num_pieces = len(pieces_on_board)
@@ -316,24 +331,27 @@ def encode_board_relative(board: chess.Board, use_move_distance: bool = False) -
             dy = (r2 - r1) / 7.0
             
             # Build feature list
-            features = [manhattan, chebyshev, dx, dy]  # Always include direction vectors
+            features = [manhattan, chebyshev, dx, dy]
             
             # Move distance (piece-specific, optional)
             if use_move_distance:
-                # Use new piece_pair_distance that considers both pieces
                 weighted_dist, pair_features = piece_pair_distance(
                     piece1.piece_type, piece1.color,
                     piece2.piece_type, piece2.color,
                     sq1, sq2
                 )
                 features.append(weighted_dist)
-                # Add pair relationship features
                 features.extend(pair_features)
             
             encoding.extend(features)
     
     # 3. Side to move
-    encoding.append(1.0 if board.turn == chess.WHITE else 0.0)
+    # In v4, this is always 1.0 if we normalized. 
+    # We'll omit it to save a redundant float, but then dimensions change.
+    # Actually, let's keep it for compatibility with the generic loader if needed
+    # but the user said "remove side-to-move bit" in the plan.
+    if version != 4:
+        encoding.append(1.0 if board.turn == chess.WHITE else 0.0)
     
     return np.array(encoding, dtype=np.float32)
 
@@ -448,6 +466,7 @@ if __name__ == "__main__":
     parser.add_argument("--syzygy", type=str, default="syzygy")
     parser.add_argument("--data", type=str, default="data")
     parser.add_argument("--config", type=str, default="KQvK")
+    parser.add_argument("--version", type=int, default=1, help="Encoding version (1, 2, 3, or 4)")
     parser.add_argument("--compact", action="store_true", default=True,
                         help="Use compact encoding (only pieces present)")
     parser.add_argument("--full", action="store_true",

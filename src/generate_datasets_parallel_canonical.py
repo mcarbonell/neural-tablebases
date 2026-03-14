@@ -69,7 +69,7 @@ def process_chunk_canonical(args):
     Process a chunk with canonical forms.
     Returns (chunk_id, positions, wdl, dtz, canonical_keys).
     """
-    chunk_id, syzygy_path, all_pieces, start_idx, count, compact, relative, use_move_distance = args
+    chunk_id, syzygy_path, all_pieces, start_idx, count, compact, relative, use_move_distance, version = args
     
     try:
         # Open tablebase in this process
@@ -87,7 +87,7 @@ def process_chunk_canonical(args):
         
         # Encoding function for canonical forms
         def encoding_func(board):
-            return encode_board(board, compact=compact, relative=relative,
+            return encode_board(board, compact=compact, relative=(f"v{version}" if version == 4 else relative),
                                use_move_distance=use_move_distance)
         
         for squares in combinations:
@@ -155,7 +155,7 @@ def process_chunk_canonical(args):
 def generate_dataset_parallel_canonical(syzygy_path: str, output_dir: str, config: str, 
                                         compact: bool = True, relative: bool = False, 
                                         use_move_distance: bool = False, canonical: bool = False,
-                                        num_workers: int = None, chunk_size: int = 10000):
+                                        num_workers: int = None, chunk_size: int = 10000, version: int = 1):
     """
     Generate dataset with proper canonical forms support.
     """
@@ -209,7 +209,7 @@ def generate_dataset_parallel_canonical(syzygy_path: str, output_dir: str, confi
         start_idx = i * chunk_size
         count = min(chunk_size, total_combinations - start_idx)
         chunks.append((i, syzygy_path, all_pieces, start_idx, count,
-                      compact, relative, use_move_distance))
+                      compact, relative, use_move_distance, version))
     
     print(f"\nProcessing with {'canonical forms' if canonical else 'incremental disk writing'}...")
     
@@ -387,6 +387,7 @@ if __name__ == "__main__":
                        help="Number of parallel workers (default: CPU count, max 8)")
     parser.add_argument("--chunk-size", type=int, default=10000,
                        help="Number of combinations per chunk (default: 10000)")
+    parser.add_argument("--version", type=int, default=1, help="Encoding version (1, 2, 3, or 4)")
     args = parser.parse_args()
     
     compact = not args.full
@@ -404,5 +405,6 @@ if __name__ == "__main__":
         use_move_distance=args.move_distance,
         canonical=args.canonical,
         num_workers=args.workers,
-        chunk_size=args.chunk_size
+        chunk_size=args.chunk_size,
+        version=args.version
     )

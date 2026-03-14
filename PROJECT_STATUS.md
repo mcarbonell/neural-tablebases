@@ -62,7 +62,7 @@ Implement and validate canonical forms for 50% dataset reduction while maintaini
 
 ### Planned ⏭️
 
-1. **KRRvK Canonical Generation & Training** (PRIORITY)
+1. **KPvKP Canonical Generation & Training** (PRIORITY)
    - Regenerate with canonical forms (50% reduction)
    - Train with optimized hyperparameters (200 epochs, batch 512)
    - Expected accuracy: >99.9% with 50% less data
@@ -75,13 +75,13 @@ Implement and validate canonical forms for 50% dataset reduction while maintaini
 
 3. **Next 4-Piece Endgames with Canonical Forms**
    - KRvKP: Asymmetric, pawn complexity (~1.25 hours generation with 50% reduction)
-   - KPvKP: Most complex 4-piece, zugzwang heavy (~1.25 hours generation)
+   - KRvKN: Complex 4-piece endgame
    - KBPvK: Fortress positions (~1.25 hours generation)
    - All with 50% dataset reduction via canonical forms
 
 4. **Additional 4-Piece Endgames**
    - KQvKQ (material equal, complex)
-   - KQPvK (promotion complexity)
+   - KQvKR (Queen vs rook, material imbalance)
    - All with canonical forms optimization
 
 ## 🔬 Key Findings

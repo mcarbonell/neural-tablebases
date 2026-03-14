@@ -31,8 +31,11 @@ class NeuralSearcher:
         # Mapping from input_size to config
         config_map = {
             43: (3, True, 1),
+            45: (3, True, 4),
             65: (4, True, 1),
+            68: (4, True, 4),
             91: (5, True, 1),
+            95: (5, True, 4),
             46: (3, True, 2),
             64: (3, True, 3),
             107: (4, True, 3),
@@ -70,7 +73,7 @@ class NeuralSearcher:
             # More pieces? Shouldn't happen in this PoC but handle just in case
             return 1, 0.0
             
-        x = encode_board(board, relative=self.use_relative_encoding, 
+        x = encode_board(board, relative=('v4' if self.encoding_version == 4 else True), 
                          use_move_distance=(self.encoding_version == 3))
         x_tensor = torch.from_numpy(x).float().unsqueeze(0).to(self.device)
         
@@ -81,7 +84,7 @@ class NeuralSearcher:
             
         # Standardize score to White's perspective
         # 3 classes: 0=Loss, 1=Draw, 2=Win (relative to side to move)
-        if board.turn == chess.BLACK:
+        if self.encoding_version != 4 and board.turn == chess.BLACK:
             wdl_class = 2 - wdl_class
             
         return wdl_class, dtz
