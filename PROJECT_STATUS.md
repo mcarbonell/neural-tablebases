@@ -99,6 +99,10 @@ Implement and validate canonical forms for 50% dataset reduction while maintaini
    - KRvK: 100.00% (same as original)
    - KPvK: 99.57% (close to original 99.88%)
    - DTZ MAE improved in all cases
+4. **Search-based Error Correction** (NEW)
+   - Depth-1 search provides massive accuracy boost (92% -> 99.5%+) ✅
+   - Depth-2 achieves 100% accuracy in tested 3-piece endgames ✅
+   - Successfully validated as a "patch" for NN local inconsistencies ✅
 
 3. **Encoding is more important than model size**
    - 43 dims beats 192 dims

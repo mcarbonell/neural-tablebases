@@ -1,0 +1,38 @@
+{
+  "original_results": {
+    "KQvK_original": {
+      "success": true,
+      "accuracy": 99.94,
+      "dtz_mae": 0.64
+    },
+    "KRvK_original": {
+      "success": true,
+      "accuracy": 100.0,
+      "dtz_mae": 1.0
+    },
+    "KPvK_original": {
+      "success": true,
+      "accuracy": 99.88,
+      "dtz_mae": 0.06
+    }
+  },
+  "canonical_results": {
+    "KQvK_canonical": {
+      "success": false,
+      "model_name": "kqvk_canonical",
+      "error": ": train.py [-h] --data_path DATA_PATH [--model {mlp,siren}]\n                [--epochs EPOCHS] [--batch_size BATCH_SIZE] [--lr LR]\n                [--patience PATIENCE] [--wdl_classes {3,5}]\n                [--hard_weight HARD_WEIGHT] [--hard_mining]\n                [--hard_mining_freq HARD_MINING_FREQ]\n                [--hard_mining_epochs HARD_MINING_EPOCHS]\ntrain.py: error: unrecognized arguments: --learning_rate 0.001 --model_name kqvk_canonical --output_dir models/kqvk_canonical --save_best\n"
+    },
+    "KRvK_canonical": {
+      "success": false,
+      "model_name": "krvk_canonical",
+      "error": ": train.py [-h] --data_path DATA_PATH [--model {mlp,siren}]\n                [--epochs EPOCHS] [--batch_size BATCH_SIZE] [--lr LR]\n                [--patience PATIENCE] [--wdl_classes {3,5}]\n                [--hard_weight HARD_WEIGHT] [--hard_mining]\n                [--hard_mining_freq HARD_MINING_FREQ]\n                [--hard_mining_epochs HARD_MINING_EPOCHS]\ntrain.py: error: unrecognized arguments: --learning_rate 0.001 --model_name krvk_canonical --output_dir models/krvk_canonical --save_best\n"
+    },
+    "KPvK_canonical": {
+      "success": false,
+      "model_name": "kpvk_canonical",
+      "error": ": train.py [-h] --data_path DATA_PATH [--model {mlp,siren}]\n                [--epochs EPOCHS] [--batch_size BATCH_SIZE] [--lr LR]\n                [--patience PATIENCE] [--wdl_classes {3,5}]\n                [--hard_weight HARD_WEIGHT] [--hard_mining]\n                [--hard_mining_freq HARD_MINING_FREQ]\n                [--hard_mining_epochs HARD_MINING_EPOCHS]\ntrain.py: error: unrecognized arguments: --learning_rate 0.001 --model_name kpvk_canonical --output_dir models/kpvk_canonical --save_best\n"
+    }
+  },
+  "comparisons": [],
+  "timestamp": "2026-03-13T22:58:15.804011"
+}

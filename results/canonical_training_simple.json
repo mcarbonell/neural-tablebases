@@ -1,0 +1,26 @@
+{
+  "results": {
+    "KQvK": {
+      "success": true,
+      "endgame": "KQvK",
+      "accuracy": null,
+      "dtz_mae": null,
+      "dataset_size": "data/KQvK_canonical.npz"
+    },
+    "KRvK": {
+      "success": true,
+      "endgame": "KRvK",
+      "accuracy": null,
+      "dtz_mae": null,
+      "dataset_size": "data/KRvK_canonical.npz"
+    },
+    "KPvK": {
+      "success": true,
+      "endgame": "KPvK",
+      "accuracy": null,
+      "dtz_mae": null,
+      "dataset_size": "data/KPvK_canonical.npz"
+    }
+  },
+  "timestamp": "2026-03-13T23:11:33.316219"
+}

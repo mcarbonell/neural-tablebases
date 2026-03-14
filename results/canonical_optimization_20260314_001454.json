@@ -1,0 +1,148 @@
+{
+  "kpvk_optimization": {
+    "baseline": {
+      "success": true,
+      "accuracy": 98.38,
+      "dtz_mae": 0.14,
+      "training_time": null,
+      "config": {
+        "name": "baseline",
+        "epochs": 50,
+        "batch_size": 1024,
+        "lr": 0.001,
+        "hard_mining": true
+      }
+    },
+    "more_epochs": {
+      "success": true,
+      "accuracy": 99.14,
+      "dtz_mae": 0.07,
+      "training_time": null,
+      "config": {
+        "name": "more_epochs",
+        "epochs": 200,
+        "batch_size": 1024,
+        "lr": 0.001,
+        "hard_mining": true
+      }
+    },
+    "small_batch": {
+      "success": true,
+      "accuracy": 99.14,
+      "dtz_mae": 0.09,
+      "training_time": null,
+      "config": {
+        "name": "small_batch",
+        "epochs": 100,
+        "batch_size": 512,
+        "lr": 0.001,
+        "hard_mining": true
+      }
+    },
+    "low_lr": {
+      "success": true,
+      "accuracy": 98.83999999999999,
+      "dtz_mae": 0.1,
+      "training_time": null,
+      "config": {
+        "name": "low_lr",
+        "epochs": 100,
+        "batch_size": 1024,
+        "lr": 0.0005,
+        "hard_mining": true
+      }
+    },
+    "high_lr": {
+      "success": true,
+      "accuracy": 99.08,
+      "dtz_mae": 0.09,
+      "training_time": null,
+      "config": {
+        "name": "high_lr",
+        "epochs": 100,
+        "batch_size": 1024,
+        "lr": 0.002,
+        "hard_mining": true
+      }
+    },
+    "more_patience": {
+      "success": true,
+      "accuracy": 99.22,
+      "dtz_mae": 0.05,
+      "training_time": null,
+      "config": {
+        "name": "more_patience",
+        "epochs": 300,
+        "batch_size": 1024,
+        "lr": 0.001,
+        "patience": 200,
+        "hard_mining": true
+      }
+    }
+  },
+  "all_results": {
+    "KQvK": {
+      "original_accuracy": 99.94,
+      "original_dtz_mae": 0.64,
+      "result": {
+        "success": true,
+        "accuracy": 100.0,
+        "dtz_mae": 0.47,
+        "training_time": null,
+        "config": {
+          "name": "optimized",
+          "epochs": 200,
+          "batch_size": 512,
+          "lr": 0.001,
+          "patience": 150,
+          "hard_mining": true
+        }
+      }
+    },
+    "KRvK": {
+      "original_accuracy": 100.0,
+      "original_dtz_mae": 1.0,
+      "result": {
+        "success": true,
+        "accuracy": 100.0,
+        "dtz_mae": 0.78,
+        "training_time": null,
+        "config": {
+          "name": "optimized",
+          "epochs": 200,
+          "batch_size": 512,
+          "lr": 0.001,
+          "patience": 150,
+          "hard_mining": true
+        }
+      }
+    },
+    "KPvK": {
+      "original_accuracy": 99.88,
+      "original_dtz_mae": 0.06,
+      "result": {
+        "success": true,
+        "accuracy": 99.57000000000001,
+        "dtz_mae": 0.05,
+        "training_time": null,
+        "config": {
+          "name": "optimized",
+          "epochs": 200,
+          "batch_size": 512,
+          "lr": 0.001,
+          "patience": 150,
+          "hard_mining": true
+        }
+      }
+    }
+  },
+  "best_config": {
+    "name": "optimized",
+    "epochs": 200,
+    "batch_size": 512,
+    "lr": 0.001,
+    "patience": 150,
+    "hard_mining": true
+  },
+  "timestamp": "2026-03-14T00:14:54.550014"
+}

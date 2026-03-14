@@ -1,0 +1,79 @@
+{
+  "original_results": {
+    "KQvK": {
+      "accuracy": 99.94,
+      "dtz_mae": 0.64
+    },
+    "KRvK": {
+      "accuracy": 100.0,
+      "dtz_mae": 1.0
+    },
+    "KPvK": {
+      "accuracy": 99.88,
+      "dtz_mae": 0.06
+    }
+  },
+  "canonical_results": {
+    "KQvK": {
+      "success": true,
+      "endgame": "KQvK",
+      "best_accuracy": 99.81,
+      "best_dtz_mae": 0.62,
+      "final_accuracy": 99.78,
+      "final_dtz_mae": 0.65,
+      "dataset": "data/KQvK_canonical.npz",
+      "epochs": 50
+    },
+    "KRvK": {
+      "success": true,
+      "endgame": "KRvK",
+      "best_accuracy": 99.97,
+      "best_dtz_mae": 0.97,
+      "final_accuracy": 99.97,
+      "final_dtz_mae": 1.0,
+      "dataset": "data/KRvK_canonical.npz",
+      "epochs": 50
+    },
+    "KPvK": {
+      "success": true,
+      "endgame": "KPvK",
+      "best_accuracy": 98.03,
+      "best_dtz_mae": 0.12,
+      "final_accuracy": 98.81,
+      "final_dtz_mae": 0.13,
+      "dataset": "data/KPvK_canonical.npz",
+      "epochs": 50
+    }
+  },
+  "comparisons": [
+    {
+      "endgame": "KQvK",
+      "original_accuracy": 99.94,
+      "canonical_accuracy": 99.78,
+      "accuracy_diff": -0.1599999999999966,
+      "original_dtz_mae": 0.64,
+      "canonical_dtz_mae": 0.65,
+      "dtz_diff": 0.010000000000000009
+    },
+    {
+      "endgame": "KRvK",
+      "original_accuracy": 100.0,
+      "canonical_accuracy": 99.97,
+      "accuracy_diff": -0.030000000000001137,
+      "original_dtz_mae": 1.0,
+      "canonical_dtz_mae": 1.0,
+      "dtz_diff": 0.0
+    },
+    {
+      "endgame": "KPvK",
+      "original_accuracy": 99.88,
+      "canonical_accuracy": 98.81,
+      "accuracy_diff": -1.0699999999999932,
+      "original_dtz_mae": 0.06,
+      "canonical_dtz_mae": 0.13,
+      "dtz_diff": 0.07
+    }
+  ],
+  "timestamp": "2026-03-13T23:21:27.865183",
+  "epochs": 50
+}
