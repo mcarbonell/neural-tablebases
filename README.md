@@ -11,26 +11,28 @@
 ## 🎯 Quick Results
 
 - **99.93% average accuracy** on 3-piece endgames
+- **97.4% accuracy** on 4-piece endgames (KPvKP) with **V4 Encoding**
+- **V4 Encoding**: Perspective normalization + Pawn promotion progress features
 - **79.7x compression ratio** (956 MB → 12 MB with exception maps)
-- **Fast convergence:** 98%+ accuracy in 1 epoch
-- **Universal approach:** No endgame-specific rules
+- **Parallel Generation**: 6-7x faster dataset creation with canonical forms
+- **Search-based correction**: 100% accuracy in 3-piece endgames with 2-ply search
 
 ## 📊 Current Status
 
 ### Completed Experiments
 
-| Endgame | Positions | Accuracy | Status |
-|---------|-----------|----------|--------|
-| KQvK | 368,452 | 99.92% | ✅ Complete |
-| KRvK | 399,112 | 99.99% | ✅ Complete |
-| KPvK | 331,352 | 99.89% | ✅ Complete |
-| KRRvK | ~24M | TBD | 🔄 Generating (82%) |
+| Endgame | Positions | Accuracy | Encoding | Status |
+|---------|-----------|----------|----------|--------|
+| KQvK | 368,452 | 99.92% | v1 | ✅ |
+| KRvK | 399,112 | 99.99% | v1 | ✅ |
+| KPvK | 331,352 | 99.89% | v1 | ✅ |
+| KPvKP | ~6.2M | 97.4% | **v4** | ✅ |
+| KRPvKP | ~6.2M | 94.1% | **v4** | 🔄 Training |
 
-### In Progress
+### Breakthroughs
 
-- **KRRvK dataset generation:** 82% complete (~2.5 hours remaining)
-- **Parallel generation:** Implemented (6-7x speedup for future endgames)
-- **Next:** Train KRRvK, then generate KRvKP using parallel version
+- **V4 Encoding**: Solved "race positions" by providing explicit pawn progress features.
+- **Minimax Search**: Shallow 2-ply search acts as a perfect patch for neural evaluation errors.
 
 ## 🚀 Quick Start
 

@@ -39,25 +39,12 @@ def flip_board(board: chess.Board) -> chess.Board:
     return new_board
 
 def encode_board(board: chess.Board, compact: bool = True, relative: bool = False, use_move_distance: bool = False) -> np.ndarray:
-    """
-    Encodes the board into a flat array.
-    
-    Args:
-        board: chess.Board object
-        compact: If True, uses compact encoding (only pieces present).
-                 If False, uses full 768-dim encoding (12 pieces * 64 squares).
-        relative: If True, uses relative/geometric encoding (RECOMMENDED).
-        use_move_distance: If True, adds piece-specific move distance (encoding v2).
-    
-    Returns:
-        numpy array with encoding
-    """
+    if str(relative).lower() == 'v4':
+        return encode_board_relative(board, version=4)
+        
     if relative:
         # Relative encoding: geometric features + piece info
         return encode_board_relative(board, use_move_distance=use_move_distance)
-    
-    if str(relative).lower() == 'v4':
-        return encode_board_relative(board, version=4)
     
     if not compact:
         # Full encoding: 768 dimensions (12 pieces * 64 squares)

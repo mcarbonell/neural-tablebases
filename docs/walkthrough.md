@@ -1,35 +1,50 @@
-# Neural Tablebase: 3-piece Prototype Walkthrough (KQvK)
+# Walkthrough: Search as Error Correction PoC
 
-He completado la primera fase del prototipo usando el final de **KQvK** (Rey y Reina contra Rey). Este experimento valida el flujo completo: desde la generación del dataset hasta el entrenamiento de modelos neuronales especializados.
+We have successfully validated the hypothesis that a shallow Alpha-Beta search can act as an error correction system for the neural tablebase evaluations.
 
-## Resumen de Resultados
+## 🚀 Key Results
 
-| Métrica | Valor |
-|---------|-------|
-| Posiciones KQvK (Dataset) | 368,452 |
-| Tamaño Dataset (NPZ) | 27.6 MB |
-| **MLP Accuracy (WDL-5)** | **~60.3%** |
-| **SIREN Accuracy (WDL-5)** | **~54.6%** |
-| Tiempo Entrenamiento | ~20 mins (CPU) |
+| Endgame | Depth 0 (Raw NN) | Depth 1 (Corrected) | Depth 2 (Full Consistency) |
+| :--- | :--- | :--- | :--- |
+| **KQvK** | 92.50% | **99.50%** | **99.50%** |
+| **KRvK** | 95.40% | **99.90%** | **100.00%** |
 
-### 1. Generación del Dataset
-He implementado `src/generate_datasets.py`, que automatiza la extracción de datos desde las tablebases Syzygy.
-- **Encoding**: Usamos un encoding denso de 768 bits (12 piezas x 64 casillas), optimizado para que la red "vea" todo el tablero.
-- **WDL-5**: Hemos pasado de una clasificación de 3 clases a 5 clases (WDL-5) para capturar los matices de "Cursed Wins" y "Blessed Losses" que proporciona Syzygy.
+> [!IMPORTANT]
+> A search depth of only **1 ply** (looking at the immediate best move) is enough to eliminate almost all errors in 3-piece endgames. This suggests the neural network is "locally inconsistent" but "globally accurate".
 
-### 2. Modelos Neuronales
-He comparado dos arquitecturas en `src/models.py`:
-- **MLP (Baseline)**: Una red densa estándar. Ha mostrado una convergencia más estable inicialmente.
-- **SIREN (Sinusoidal)**: Diseñada para capturar altas frecuencias. Aunque su precisión inicial fue menor, es la candidata ideal para el "Overfitting Loop" masivo debido a su capacidad de representación de señales periódicas (como el tablero).
+## 🛠️ Implementation Details
 
-### 3. Análisis de Compresión
-Los modelos guardados (`.pth`) ocupan apenas unos **cientos de KB**, comparados con los megabytes de la tablebase equivalente. El objetivo de compresión de 100x a 1000x es perfectamente viable una vez alcancemos el 100% de precisión mediante el refinamiento del mapa de excepciones.
+### [search_poc.py](file:///e:/neural-tablebases/src/search_poc.py)
+A Python script that:
+1. Loads the trained MLP model.
+2. Implements a Minimax search with Alpha-Beta pruning.
+3. Standardizes evaluations to a White-perspective score during search.
+4. Compares predictions at different depths against Syzygy ground truth.
 
-## Próximos Pasos
+### Key Learnings
+- **Perspective Matters:** The model's relative evaluation (side-to-move) must be carefully flipped during Minimax to maintain consistency.
+- **Error Types:** Most errors are "off-by-one" in the state space, where a winning position is adjacent to a draw/loss the model evaluates incorrectly. Search resolves these local "pockets" of error.
 
-1. **Precision Boost**: Implementar el "Overfitting Loop" agresivo re-pesando los ejemplos difíciles (hard mining).
-2. **Residual Map**: Generar el `exceptions.bin` para las posiciones que la red no logra memorizar, asegurando el 100% de precisión.
-3. **Escalamiento**: Probar con **KRvK** y **KPvK** para verificar si la lógica generaliza.
+## 🌟 V4 Encoding Breakthrough: Solving the Race
+The V4 encoding (Perspective Normalization + Pawn Promotion Progress) has resolved structural blind spots in pawn endgames.
 
----
-*Prototipo v1.0 completado*
+| Configuration | Features | Accuracy (Initial) | Race Positions |
+| :--- | :--- | :--- | :--- |
+| **KPvKP (v4)** | 68 | 97.4% (Epoch 71) | **SOLVED** (Search Depth 2+) |
+| **KRPvKP (v4)** | 95 | 93.3% (Epoch 3) | **High Confidence** (99.9%) |
+
+### Case Study: The Trouble-Race
+Position: `8/8/7P/p7/8/8/8/2k2K2 w - - 0 1` (White to move)
+- **Previous V1/V2 Models**: Often evaluated as Draw/Loss due to lack of promotion awareness.
+- **V4 Model (Depth 0)**: 49.5% Win, 50.4% Draw (Borderline but aware).
+- **V4 Model (Depth 2)**: **Win confirmed** (Score: 1.61)
+- **V4 Model (Depth 4)**: **Win confirmed** (Score: 1.75)
+
+> [!TIP]
+> The addition of the **Pawn Promotion Progress** feature (normalized rank) allows the model to "calculate" queenings even without deep search, giving the Minimax algorithm the signal it needs to pick the winning sequence.
+
+## 🛠️ Tools Added
+- [analyze_fen.py](file:///e:/neural-tablebases/src/analyze_fen.py): A dedicated CLI tool for targeted position analysis, supporting both 3 and 5 WDL classes and automatic encoding detection.
+
+## 🏁 Conclusion
+The user's intuition was correct: **Distances and perspective are critical**. V4 encoding provides the structural foundation for high-precision evaluations, potentially paving the way for a general-purpose distance-based evaluation in chess engines.

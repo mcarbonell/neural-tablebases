@@ -87,7 +87,8 @@ def process_chunk_canonical(args):
         
         # Encoding function for canonical forms
         def encoding_func(board):
-            return encode_board(board, compact=compact, relative=(f"v{version}" if version == 4 else relative),
+            rel_arg = (f"v{version}" if version == 4 else relative)
+            return encode_board(board, compact=compact, relative=rel_arg,
                                use_move_distance=use_move_distance)
         
         for squares in combinations:
@@ -129,7 +130,8 @@ def process_chunk_canonical(args):
                             canonical_key = hash(str(board.piece_map()))
                         
                         # Encode canonical board
-                        encoding = encode_board(canonical_board, compact=compact, relative=relative,
+                        rel_arg = (f"v{version}" if version == 4 else relative)
+                        encoding = encode_board(canonical_board, compact=compact, relative=rel_arg,
                                                use_move_distance=use_move_distance)
                         
                         positions.append(encoding)
@@ -210,8 +212,6 @@ def generate_dataset_parallel_canonical(syzygy_path: str, output_dir: str, confi
         count = min(chunk_size, total_combinations - start_idx)
         chunks.append((i, syzygy_path, all_pieces, start_idx, count,
                       compact, relative, use_move_distance, version))
-    
-    print(f"\nProcessing with {'canonical forms' if canonical else 'incremental disk writing'}...")
     
     start_time = time.time()
     completed_chunks = 0

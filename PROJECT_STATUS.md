@@ -8,65 +8,46 @@ Implement and validate canonical forms for 50% dataset reduction while maintaini
 
 ## 📊 Progress Summary
 
+## 📊 Progress Summary
+
 ### Completed ✅
 
-1. **3-Piece Endgames** (99.93% average accuracy)
-   - KQvK: 99.92% ✅
-   - KRvK: 99.99% ✅
-   - KPvK: 99.89% ✅
+1. **V4 Encoding Breakthrough** (NEW)
+   - Perspective normalization (Side-to-Move as White) ✅
+   - Pawn promotion progress feature ✅
+   - **SOLVED**: Race position `8/8/7P/p7/8/8/8/2k2K2 w` correctly identified ✅
+   - Applied to KPvKP and KRPvKP models ✅
 
-2. **Encoding Improvements**
-   - Geometric encoding v1 (43 dims) ✅
-   - Geometric encoding v2 with move distance (46 dims) ✅
-   - Bug fix: Piece type ordering corrected ✅
-   - Encoding v2 fixed (64 dims) - tested but not recommended ✅
+2. **3-Piece Endgames (Legacy v1)**
+   - KQvK: 99.92%, KRvK: 99.99%, KPvK: 99.89% ✅
 
-3. **WDL 5 Classes Support**
-   - Auto-detection of 3 vs 5 classes ✅
-   - Class weights for imbalanced datasets ✅
-   - Ready for cursed/blessed positions ✅
-
-4. **Canonical Forms Implementation** (NEW)
-   - 8 board symmetries (4 rotations × 2 reflections) ✅
+3. **Canonical Forms & Parallel Generation**
    - 50% dataset reduction achieved ✅
-   - Optimized hyperparameters (200 epochs, batch 512) ✅
-   - Results: KQvK 100.00%, KRvK 100.00%, KPvK 99.57% ✅
+   - Parallel generator (src/generate_datasets_parallel_canonical.py) deployed ✅
+   - 6-7x faster generation speed ✅
 
-5. **Documentation**
-   - Paper draft for ICGA Journal ✅
-   - GitHub README ✅
-   - TalkChess forum post ✅
-   - Technical analysis documents ✅
+4. **WDL 5 Classes Support**
+   - Fully integrated for 5-piece endgames ✅
+   - Auto-detection in analysis tools ✅
 
 ### In Progress 🔄
 
-1. **Canonical Forms Optimization** (NEW)
-   - Status: Hyperparameter tuning complete
-   - Best config: 200 epochs, batch 512, lr 0.001
-   - Results documented and validated
-   - Ready for 4-piece application
+1. **KRPvKP V4 Training** (5-Piece)
+   - Status: Epoch 8+ complete
+   - Accuracy: **94.1%** and climbing
+   - Confidence: ~99.9% on tested win positions
+   - Architecture: MLP 2048-1024-512-256
 
-2. **KRRvK Dataset Generation** (ON HOLD)
-   - Status: 81% complete (~13.6M / 16.8M combinations checked)
-   - Valid positions found: ~19.5M
-   - Time elapsed: ~18 hours
-   - Time remaining: ~3 hours
-   - Using: Single-threaded generation
-   - Note: Will regenerate with canonical forms
-
-3. **Parallel Generation with Canonical Forms** (NEW)
-   - Status: Complete ✅
-   - Performance: 6-7x faster than single-threaded
-   - Features: Canonical forms deduplication, progress tracking
-   - Ready for: All future dataset generation
+2. **KPvKP V4 Precision Training** (4-Piece)
+   - Status: Epoch 71+ complete
+   - Accuracy: **97.35%**
+   - Result: Correctly solves complex race positions with search depth 2
 
 ### Planned ⏭️
 
-1. **KPvKP Canonical Generation & Training** (PRIORITY)
-   - Regenerate with canonical forms (50% reduction)
-   - Train with optimized hyperparameters (200 epochs, batch 512)
-   - Expected accuracy: >99.9% with 50% less data
-   - Purpose: Validate 4-piece scaling with canonical forms
+1. **Massive 5-Piece Expansion**
+   - Generate KRvKP, KBPvK, KNPvK with V4 + Canonical
+   - Standardize search-based error correction for all 5-piece models
 
 2. **Canonical Forms for All Endgames**
    - Apply to existing 3-piece datasets (already done)
