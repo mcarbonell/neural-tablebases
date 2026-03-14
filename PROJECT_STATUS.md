@@ -23,7 +23,8 @@ Implement and validate canonical forms for 50% dataset reduction while maintaini
 
 3. **Canonical Forms & Parallel Generation**
    - 50% dataset reduction achieved ✅
-   - Parallel generator (src/generate_datasets_parallel_canonical.py) deployed ✅
+   - Parallel generator (`src/generate_datasets_parallel.py`) deployed ✅
+   - Canonical wrapper (`src/generate_datasets_parallel_canonical.py`) kept for backward compatibility ✅
    - 6-7x faster generation speed ✅
 
 4. **WDL 5 Classes Support**
@@ -160,7 +161,7 @@ Implement and validate canonical forms for 50% dataset reduction while maintaini
 ### Immediate (Today/Tomorrow)
 
 1. ⏳ **Regenerate KRRvK with canonical forms** (PRIORITY)
-   - Use parallel canonical generator
+   - Use `python src/generate_datasets_parallel.py --config KRRvK --relative --enumeration permutation --canonical --canonical-mode auto`
    - Expected: 50% dataset reduction
    - Time: ~3 hours (vs 6 hours original)
 
@@ -178,7 +179,7 @@ Implement and validate canonical forms for 50% dataset reduction while maintaini
 
 1. 📦 **Generate all 4-piece endgames with canonical forms**
    - KRvKP, KPvKP, KBPvK with 50% reduction
-   - Use parallel canonical generator
+   - Use `python src/generate_datasets_parallel.py --config ENDGAME --relative --enumeration permutation --canonical --canonical-mode auto`
    - Expected generation time: ~1.25 hours each
 
 2. 🎓 **Train all 4-piece canonical models**

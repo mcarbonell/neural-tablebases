@@ -39,17 +39,28 @@
 ### Generate Dataset
 
 ```bash
-# 3-piece endgame (v1 encoding)
-python src/generate_datasets.py --config KQvK --relative
+# Exhaustive, parallel (recommended)
+python src/generate_datasets_parallel.py --config KQvK --relative --enumeration permutation
 
-# 4-piece endgame (v2 encoding with move distance)
-python src/generate_datasets.py --config KRRvK --relative --move-distance
+# V4 encoding (KPvKP). `--turns auto` defaults to white_only because V4 normalizes STM
+python src/generate_datasets_parallel.py --config KPvKP --relative --version 4 --enumeration permutation
+
+# Canonical forms (pawn-safe auto mode)
+python src/generate_datasets_parallel.py --config KPvKP --relative --version 4 --canonical --canonical-mode auto
+
+# Fast smoke-test (non-exhaustive)
+python src/generate_datasets_parallel.py --data data/smoke --config KQvK --relative --enumeration combination --limit-items 5000
+
+# Fast smoke-test for pawn endgames: avoid biased prefixes with deterministic shuffling
+python src/generate_datasets_parallel.py --data data/smoke --config KPvKP --relative --version 4 --enumeration permutation --limit-items 5000 --shuffle-seed 42 --workers 1
 ```
+
+The generator always writes a `*_metadata.json` next to the `.npz`. When `--limit-items` and/or `--item-offset` are used, the output file name includes a `_partial_...` suffix to avoid overwriting full datasets.
 
 ### Train Model
 
 ```bash
-python src/train.py --data_path data/KQvK.npz --model mlp --epochs 30
+python src/train.py --data_path data/KPvKP_canonical.npz --model mlp --epochs 30 --model_name mlp_kpvkp_v4_canonical
 ```
 
 ### Analyze Results
@@ -115,16 +126,17 @@ Global (1 dim):
   - Side to move: 1 dim
 ```
 
-### Geometric Encoding v2 (with move distance)
+### Geometric Encoding v2.1 (with move distance + pair features)
 
-For 3 pieces: **46 dimensions** (+3 dims)
+For 3 pieces: **64 dimensions** (adds move-distance + relationship features)
 
 ```
-Per pair (5 dims × 3 = 15):
+Per pair (11 dims × 3 = 33):
   - Manhattan distance: 1 dim
   - Chebyshev distance: 1 dim
-  - Move distance (piece-specific): 1 dim  ← NEW
   - Direction (dx, dy): 2 dims
+  - Weighted move distance (piece-specific): 1 dim  ← NEW
+  - Relationship features (ally/enemy/king-king/etc): 6 dims  ← NEW
 ```
 
 **Move distance** captures how many moves a piece needs to reach another square:

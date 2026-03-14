@@ -3,7 +3,13 @@ Canonical Forms: Encontrar la representación canónica de un tablero
 """
 import chess
 import numpy as np
-from typing import List, Tuple
+from typing import List, Tuple, Literal, Optional
+
+CanonicalMode = Literal["auto", "dihedral", "file_mirror", "none"]
+
+
+def _board_has_pawns(board: chess.Board) -> bool:
+    return any(piece.piece_type == chess.PAWN for piece in board.piece_map().values())
 
 def rotate_board(board: chess.Board, rotation: int) -> chess.Board:
     """
@@ -74,18 +80,45 @@ def get_all_symmetries(board: chess.Board) -> List[chess.Board]:
     """
     Devuelve todas las simetrías del tablero (8 total).
     4 rotaciones × 2 reflexiones.
+
+    ⚠️ Nota (peones):
+    Rotaciones/reflexiones verticales no preservan la semántica de los peones.
+    Para deduplicación "segura con peones", usa `get_symmetries(board, mode="auto")`.
     """
-    symmetries = []
-    
-    # 4 rotaciones
+    return get_symmetries(board, mode="dihedral")
+
+
+def get_symmetries(board: chess.Board, mode: CanonicalMode = "auto") -> List[chess.Board]:
+    """
+    Devuelve una lista de tableros transformados por simetrías.
+
+    Modos:
+    - "dihedral": 8 simetrías (4 rotaciones × {id, espejo horizontal}). NO seguro con peones.
+    - "file_mirror": 2 simetrías ({id, espejo horizontal}). Seguro con peones.
+    - "none": solo identidad.
+    - "auto": "file_mirror" si hay peones, si no "dihedral".
+    """
+    if mode == "auto":
+        mode = "file_mirror" if _board_has_pawns(board) else "dihedral"
+
+    if mode == "none":
+        return [board]
+
+    if mode == "file_mirror":
+        return [board, reflect_board_horizontal(board)]
+
+    if mode != "dihedral":
+        raise ValueError(f"Invalid canonical mode: {mode!r}")
+
+    symmetries: List[chess.Board] = []
+
     for rotation in range(4):
         rotated = rotate_board(board, rotation)
         symmetries.append(rotated)
-        
-        # Reflexión horizontal de cada rotación
+
         reflected = reflect_board_horizontal(rotated)
         symmetries.append(reflected)
-    
+
     return symmetries
 
 def board_to_canonical_key(board: chess.Board) -> Tuple:
@@ -118,6 +151,22 @@ def board_to_canonical_key(board: chess.Board) -> Tuple:
     
     return (turn_key, tuple(pieces))
 
+
+def canonical_key(board: chess.Board, mode: CanonicalMode = "auto") -> Tuple:
+    """Devuelve la clave canónica mínima dentro del grupo de simetrías permitido."""
+    best_key: Optional[Tuple] = None
+    for sym_board in get_symmetries(board, mode=mode):
+        key = board_to_canonical_key(sym_board)
+        if best_key is None or key < best_key:
+            best_key = key
+    assert best_key is not None
+    return best_key
+
+
+def is_canonical(board: chess.Board, mode: CanonicalMode = "auto") -> bool:
+    """True si `board` ya es el representante canónico de su órbita."""
+    return board_to_canonical_key(board) == canonical_key(board, mode=mode)
+
 def board_to_encoding_key(board: chess.Board, encoding_func) -> Tuple:
     """
     Versión compatible con el código existente.
@@ -133,7 +182,7 @@ def board_to_encoding_key(board: chess.Board, encoding_func) -> Tuple:
     else:
         return (encoding,)
 
-def find_canonical_form(board: chess.Board, encoding_func) -> Tuple[chess.Board, dict]:
+def find_canonical_form(board: chess.Board, encoding_func, mode: CanonicalMode = "auto") -> Tuple[chess.Board, dict]:
     """
     Encuentra la forma canónica de un tablero.
     
@@ -141,8 +190,8 @@ def find_canonical_form(board: chess.Board, encoding_func) -> Tuple[chess.Board,
         - canonical_board: La representación canónica
         - transform_info: Información de la transformación aplicada
     """
-    # Obtener todas las simetrías
-    symmetries = get_all_symmetries(board)
+    # Obtener simetrías (modo auto = seguro con peones)
+    symmetries = get_symmetries(board, mode=mode)
     
     # Encontrar la simetría con la clave "más pequeña"
     best_key = None
@@ -159,10 +208,21 @@ def find_canonical_form(board: chess.Board, encoding_func) -> Tuple[chess.Board,
             best_idx = idx
     
     # Información de transformación
+    if len(symmetries) == 8:
+        rotation = best_idx // 2  # 0..3
+        reflected = (best_idx % 2) == 1
+    elif len(symmetries) == 2:
+        rotation = 0
+        reflected = best_idx == 1
+    else:
+        rotation = 0
+        reflected = False
+
     transform_info = {
-        'rotation': best_idx // 2,  # 0,1,2,3
-        'reflected': (best_idx % 2) == 1,  # True si se aplicó reflexión
-        'original_to_canonical': best_idx
+        'rotation': rotation,
+        'reflected': reflected,
+        'original_to_canonical': best_idx,
+        'mode': mode,
     }
     
     return best_board, transform_info

@@ -463,8 +463,13 @@ if __name__ == "__main__":
     parser.add_argument("--move-distance", action="store_true",
                         help="Add piece-specific move distance to encoding (v2, experimental)")
     args = parser.parse_args()
-    
+
     # --full flag overrides --compact
     compact = not args.full
-    generate_3piece_dataset(args.syzygy, args.data, args.config, compact=compact, 
-                           relative=args.relative, use_move_distance=args.move_distance)
+
+    rel_arg = args.relative
+    if args.relative and args.version == 4:
+        rel_arg = "v4"
+
+    generate_3piece_dataset(args.syzygy, args.data, args.config, compact=compact,
+                            relative=rel_arg, use_move_distance=args.move_distance)

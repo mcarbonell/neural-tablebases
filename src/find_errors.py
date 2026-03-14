@@ -1,11 +1,8 @@
 import chess
 import chess.syzygy
-import torch
-import numpy as np
 import argparse
 import random
 from search_poc import NeuralSearcher
-from generate_datasets import encode_board
 
 def find_errors(model_path, syzygy_path, config, num_samples=1000):
     searcher = NeuralSearcher(model_path, syzygy_path)
@@ -54,24 +51,20 @@ def find_errors(model_path, syzygy_path, config, num_samples=1000):
                 try:
                     # Get side-to-move true WDL
                     true_wdl = searcher.tablebase.probe_wdl(board)
-                    # Syzygy WDL: -2=Loss, 0=Draw, 2=Win (Relative to STM)
-                    stm_true = 0 if true_wdl == -2 else (1 if true_wdl == 0 else 2)
+                    # Syzygy WDL is relative to STM.
+                    if searcher.num_wdl_classes == 5:
+                        stm_true = 0 if true_wdl == -2 else (1 if true_wdl == -1 else (2 if true_wdl == 0 else (3 if true_wdl == 1 else 4)))
+                    else:
+                        stm_true = 0 if true_wdl == -2 else (1 if true_wdl == 0 else 2)
                     
-                    # Get Raw NN prediction (Relative to STM)
-                    encoding_flag = 'v4' if searcher.encoding_version == 4 else True
-                    x = encode_board(board, relative=encoding_flag, 
-                                     use_move_distance=(searcher.encoding_version == 3))
-                    x_tensor = torch.from_numpy(x).float().unsqueeze(0).to(searcher.device)
-                    wdl_logits, _ = searcher.model(x_tensor)
-                    stm_pred = torch.argmax(wdl_logits, dim=1).item()
+                    # Raw NN prediction (convert back to STM perspective)
+                    wdl_white_pred, _ = searcher.evaluate_nn(board)
+                    stm_pred = wdl_white_pred if board.turn == chess.WHITE else (searcher.num_wdl_classes - 1 - wdl_white_pred)
                     
                     if stm_pred != stm_true:
                         # Find out if search fixes it
-                        d1_white = searcher.get_search_wdl(board, 1)
-                        d1_stm = d1_white if board.turn == chess.WHITE else 2 - d1_white
-                        
-                        d3_white = searcher.get_search_wdl(board, 3)
-                        d3_stm = d3_white if board.turn == chess.WHITE else 2 - d3_white
+                        d1_stm = searcher.get_search_wdl(board, 1)
+                        d3_stm = searcher.get_search_wdl(board, 3)
                         
                         errors.append({
                             "fen": board.fen(),
@@ -98,7 +91,6 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, default="data/mlp_best.pth")
     parser.add_argument("--syzygy", type=str, default="syzygy")
     parser.add_argument("--config", type=str, default="KPvKP")
-    parser.add_argument("--version", type=int, default=None, help="Explicitly set encoding version")
     args = parser.parse_args()
     
     find_errors(args.model, args.syzygy, args.config)

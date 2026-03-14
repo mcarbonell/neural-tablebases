@@ -3,11 +3,12 @@ import chess.syzygy
 import torch
 import numpy as np
 import os
+import json
 import argparse
 import time
 from typing import List, Tuple, Dict, Optional
 from models import get_model_for_endgame
-from generate_datasets import encode_board
+from generate_datasets import encode_board, flip_board
 
 class NeuralSearcher:
     def __init__(self, model_path: str, syzygy_path: str, device: str = None):
@@ -17,6 +18,18 @@ class NeuralSearcher:
             self.device = torch.device(device)
             
         print(f"Loading model from {model_path} on {self.device}...")
+
+        self.model_path = model_path
+        self.model_metadata = None
+        meta_path = model_path.replace(".pth", "_metadata.json")
+        if os.path.exists(meta_path):
+            try:
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    self.model_metadata = json.load(f)
+            except Exception as e:
+                print(f"Warning: failed to load model metadata {meta_path}: {e}")
+                self.model_metadata = None
+
         checkpoint = torch.load(model_path, map_location=self.device)
         
         # Peek into weights to see input size
@@ -27,6 +40,13 @@ class NeuralSearcher:
             
         weights = checkpoint[first_key]
         input_size = weights.shape[1]
+
+        # Infer number of WDL classes from the checkpoint (wdl_head shape)
+        num_wdl_classes = 3
+        if "wdl_head.weight" in checkpoint and hasattr(checkpoint["wdl_head.weight"], "shape"):
+            num_wdl_classes = int(checkpoint["wdl_head.weight"].shape[0])
+        elif self.model_metadata and "dataset" in self.model_metadata:
+            num_wdl_classes = int(self.model_metadata["dataset"].get("num_wdl_classes", num_wdl_classes))
         
         # Mapping from input_size to config
         config_map = {
@@ -52,13 +72,55 @@ class NeuralSearcher:
         self.num_pieces = num_pieces
         self.use_relative_encoding = use_relative_encoding
         self.input_size = input_size
+        self.num_wdl_classes = num_wdl_classes
+
+        # Canonicalization (optional): if the model was trained on canonicalized inputs,
+        # we must apply the same canonicalization before encoding at inference time.
+        self.canonical = False
+        self.canonical_mode = "auto"
+        if self.model_metadata and isinstance(self.model_metadata.get("dataset_metadata"), dict):
+            ds_meta = self.model_metadata["dataset_metadata"]
+            self.canonical = bool(ds_meta.get("canonical", False))
+            self.canonical_mode = str(ds_meta.get("canonical_mode", "auto"))
+
+        # Detect model type (mlp vs siren) from checkpoint keys if metadata isn't available
+        model_type = "mlp"
+        if self.model_metadata and isinstance(self.model_metadata.get("args"), dict):
+            model_type = str(self.model_metadata["args"].get("model", model_type))
+        else:
+            if any(k.startswith("net.") for k in checkpoint.keys()):
+                model_type = "siren"
         
-        self.model = get_model_for_endgame('mlp', num_pieces, input_size=input_size).to(self.device)
+        self.model = get_model_for_endgame(model_type, num_pieces, num_wdl_classes=num_wdl_classes,
+                                           input_size=input_size).to(self.device)
         self.model.load_state_dict(checkpoint)
         self.model.eval()
         
-        print(f"Model loaded. Config: {num_pieces} pieces, input_size={input_size}, relative={use_relative_encoding}")
+        print(f"Model loaded. Config: {num_pieces} pieces, input_size={input_size}, "
+              f"relative={use_relative_encoding}, wdl_classes={num_wdl_classes}, "
+              f"encoding_v={self.encoding_version}, canonical={self.canonical}")
         self.tablebase = chess.syzygy.open_tablebase(syzygy_path)
+
+    def _invert_perspective(self, wdl_class: int) -> int:
+        """Convert WDL class between players (e.g., Loss<->Win)."""
+        return (self.num_wdl_classes - 1) - int(wdl_class)
+
+    def _prepare_board_for_encoding(self, board: chess.Board) -> chess.Board:
+        """
+        Apply the same normalization/canonicalization the model expects.
+        Returns a (possibly new) board object.
+        """
+        out = board
+
+        # v4 encoding normalizes side-to-move to White via flip_board when BLACK.
+        if self.encoding_version == 4 and out.turn == chess.BLACK:
+            out = flip_board(out)
+
+        if self.canonical:
+            from canonical_forms import find_canonical_form
+            out, _ = find_canonical_form(out, lambda b: (), mode=self.canonical_mode)
+
+        return out
         
     def evaluate_nn(self, board: chess.Board) -> Tuple[int, float]:
         # Count pieces
@@ -73,21 +135,26 @@ class NeuralSearcher:
             # More pieces? Shouldn't happen in this PoC but handle just in case
             return 1, 0.0
             
-        x = encode_board(board, relative=('v4' if self.encoding_version == 4 else True), 
+        original_turn = board.turn
+        board_enc = self._prepare_board_for_encoding(board)
+
+        relative_arg = False
+        if self.use_relative_encoding:
+            relative_arg = ('v4' if self.encoding_version == 4 else True)
+
+        x = encode_board(board_enc, relative=relative_arg,
                          use_move_distance=(self.encoding_version == 3))
         x_tensor = torch.from_numpy(x).float().unsqueeze(0).to(self.device)
         
         with torch.no_grad():
             wdl_logits, dtz_val = self.model(x_tensor)
-            wdl_class = torch.argmax(wdl_logits, dim=1).item()
+            wdl_stm = int(torch.argmax(wdl_logits, dim=1).item())
             dtz = dtz_val.item()
             
-        # Standardize score to White's perspective
-        # 3 classes: 0=Loss, 1=Draw, 2=Win (relative to side to move)
-        if self.encoding_version != 4 and board.turn == chess.BLACK:
-            wdl_class = 2 - wdl_class
+        # Convert from side-to-move perspective to White's perspective for minimax.
+        wdl_white = self._invert_perspective(wdl_stm) if original_turn == chess.BLACK else wdl_stm
             
-        return wdl_class, dtz
+        return wdl_white, dtz
 
     def minimax(self, board: chess.Board, depth: int, alpha: float, beta: float, is_maximizing: bool) -> float:
         if depth == 0 or board.is_game_over():
@@ -122,11 +189,10 @@ class NeuralSearcher:
         score = self.minimax(board, depth, -float('inf'), float('inf'), board.turn == chess.WHITE)
         wdl_white = int(round(score))
         
-        # For comparison with Syzygy (which is relative to side to move),
-        # we convert back to side to move perspective
+        # Convert back to side-to-move perspective (Syzygy convention)
         if board.turn == chess.BLACK:
-            return 2 - wdl_white
-        return wdl_white
+            return self._invert_perspective(wdl_white)
+        return int(wdl_white)
 
     def verify_accuracy(self, config_name: str, samples: int = 100, depths: List[int] = [0, 1, 2]):
         config = config_name.replace('_canonical', '').replace('_v2_fixed', '').replace('_v2_old', '')
@@ -172,7 +238,10 @@ class NeuralSearcher:
                 if board.is_valid():
                     try:
                         true_wdl = self.tablebase.probe_wdl(board)
-                        mapped_wdl = 0 if true_wdl == -2 else (1 if true_wdl == 0 else 2)
+                        if self.num_wdl_classes == 5:
+                            mapped_wdl = 0 if true_wdl == -2 else (1 if true_wdl == -1 else (2 if true_wdl == 0 else (3 if true_wdl == 1 else 4)))
+                        else:
+                            mapped_wdl = 0 if true_wdl == -2 else (1 if true_wdl == 0 else 2)
                         valid_boards.append((board.copy(), mapped_wdl))
                         if len(valid_boards) >= samples: break
                     except:

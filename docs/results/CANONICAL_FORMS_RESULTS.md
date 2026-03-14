@@ -16,16 +16,22 @@ Las **formas canónicas** (reducción de datasets mediante simetrías del tabler
 ## Implementación
 
 ### Algoritmo de Formas Canónicas
-- **8 simetrías** por tablero (4 rotaciones × 2 reflexiones)
-- **Deduplicación global** durante generación
-- **Clave canónica única** basada en posiciones ordenadas
-- **Integración completa** con generador paralelo
+- **Grupo de simetrías configurable**:
+  - `dihedral`: 8 simetrías (4 rotaciones × {id, espejo horizontal}) → seguro solo **sin peones**
+  - `file_mirror`: 2 simetrías ({id, espejo horizontal}) → **pawn-safe**
+  - `auto`: usa `file_mirror` si hay peones, si no `dihedral`
+- **Reducción exacta sin cache global** (modo exhaustivo): con `--enumeration permutation`, basta con filtrar a representantes canónicos (`is_canonical`).
+- **Modo legacy no exhaustivo**: `--enumeration combination` no recorre todas las asignaciones pieza-casilla; si se usa con canónicas, se hace *map+dedup por chunk* (aproximado). Preferir `permutation`.
+- **Clave canónica estable** basada en turno + piezas ordenadas (`board_to_canonical_key`).
 
 ### Generador Paralelo Mejorado
-- **`src/generate_datasets_parallel_canonical.py`** - Nueva versión con deduplicación global
+- **`src/generate_datasets_parallel.py`** - Generador principal (exhaustivo con `--enumeration permutation`)
+- **`src/generate_datasets_parallel_canonical.py`** - Wrapper retrocompatible (llama al generador principal)
 - **Progreso en tiempo real** con reducción estimada
-- **Metadatos automáticos** para análisis
+- **Metadatos automáticos** (`*_metadata.json`) para reproducibilidad y análisis
 - **Compatibilidad total** con encoding existente
+- **Smoke-tests sin sesgo** en finales con peones: `--shuffle-seed` + `--limit-items`.
+- **Evita sobrescrituras**: si la generación no es completa (`--limit-items` / `--item-offset`), el fichero sale como `*_partial_...`.
 
 ## Resultados de Reducción
 
@@ -123,21 +129,20 @@ Las **formas canónicas** (reducción de datasets mediante simetrías del tabler
 - Necesita más épocas para convergencia
 
 ### 3. **Simetrías Efectivas**
-- 8 simetrías (rotaciones + reflexiones)
-- Reducción teórica máxima: 87.5%
-- Reducción práctica: 50% (considerando ambos turnos)
+- Sin peones (`dihedral`): reducción teórica máxima 87.5% (órbita de tamaño 8)
+- Con peones (`file_mirror`): reducción teórica máxima 50% (órbita de tamaño 2)
+- En la práctica puede ser ligeramente menor por simetrías degeneradas y filtros de legalidad
 
 ### 4. **Deduplicación Global Necesaria**
-- Deduplicación por chunk no es suficiente
-- Cache global necesario para todas las posiciones
-- Implementación eficiente con claves canónicas
+- En modo exhaustivo (`--enumeration permutation`) no hace falta un cache global: filtrar a representantes canónicos da un conjunto exacto
+- En modo `combination` la deduplicación es aproximada (por chunk) y el recorrido no es exhaustivo → recomendado solo para smoke-tests
 
 ## Recomendaciones para Uso Futuro
 
 ### 1. **Usar Siempre Formas Canónicas**
 ```bash
 # Generar dataset canónico
-python src/generate_datasets_parallel_canonical.py --config KRRvK --relative --canonical
+python src/generate_datasets_parallel.py --config KRRvK --relative --enumeration permutation --canonical --canonical-mode auto
 
 # Entrenar con configuración optimizada
 python src/train.py --data_path data/KRRvK_canonical.npz --epochs 200 --batch_size 512 --lr 0.001

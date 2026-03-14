@@ -31,10 +31,12 @@ Implementar formas canónicas para **reducir datasets en 50%** manteniendo preci
 ## Implementación Técnica
 
 ### 🔧 Algoritmo de Formas Canónicas
-- **8 simetrías** por tablero (4 rotaciones × 2 reflexiones)
-- **Deduplicación global** durante generación
-- **Clave canónica única** para comparación
-- **Integración completa** con pipeline existente
+- **Grupo de simetrías configurable**:
+  - `dihedral`: 8 simetrías (4 rotaciones × {id, espejo horizontal}) → seguro solo sin peones
+  - `file_mirror`: 2 simetrías ({id, espejo horizontal}) → pawn-safe
+  - `auto`: usa `file_mirror` si hay peones, si no `dihedral`
+- **Reducción exacta sin cache global** (modo exhaustivo): con `--enumeration permutation`, basta filtrar a representantes canónicos.
+- **Modo legacy no exhaustivo**: `--enumeration combination` no recorre todas las asignaciones; con canónicas hace *map+dedup por chunk* (aprox.).
 
 ### ⚙️ Configuración Óptima
 ```python
@@ -63,7 +65,7 @@ Implementar formas canónicas para **reducir datasets en 50%** manteniendo preci
 
 ### 📈 Escalabilidad
 - **Aplicable a 4, 5, 6+ piezas**
-- **Misma reducción esperada** (50%)
+- **Reducción esperada**: ~50% con peones (`file_mirror`) y hasta 87.5% sin peones (`dihedral`)
 - **Compatible con encoding v1 y v2**
 - **Integrable en pipeline automatizado**
 
@@ -73,7 +75,7 @@ Implementar formas canónicas para **reducir datasets en 50%** manteniendo preci
 1. **Hiperparámetros críticos**: 200 épocas necesarias vs 50 originales
 2. **Batch size óptimo**: 512 vs 1024 para datasets reducidos
 3. **KPvK más difícil**: Necesita más épocas para convergencia
-4. **Deduplicación global**: Necesaria para efectividad total
+4. **Deduplicación**: en `permutation` basta filtrar representantes canónicos; `combination` es aproximado y solo para smoke-tests
 
 ### 🛠️ Implementación
 1. **Generador paralelo canónico** implementado exitosamente
@@ -86,7 +88,7 @@ Implementar formas canónicas para **reducir datasets en 50%** manteniendo preci
 ### 🎯 Para Uso Inmediato
 ```bash
 # Generar dataset canónico
-python src/generate_datasets_parallel_canonical.py --config ENDGAME --relative --canonical
+python src/generate_datasets_parallel.py --config ENDGAME --relative --enumeration permutation --canonical --canonical-mode auto
 
 # Entrenar con configuración optimizada  
 python src/train.py --data_path data/ENDGAME_canonical.npz --epochs 200 --batch_size 512 --lr 0.001
