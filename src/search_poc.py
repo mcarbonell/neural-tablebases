@@ -100,10 +100,13 @@ class NeuralSearcher:
               f"relative={use_relative_encoding}, wdl_classes={num_wdl_classes}, "
               f"encoding_v={self.encoding_version}, canonical={self.canonical}")
         self.tablebase = chess.syzygy.open_tablebase(syzygy_path)
+        
+        # Expected material (to detect promotions/material changes)
+        self.expected_pieces = None
 
-    def _invert_perspective(self, wdl_class: int) -> int:
-        """Convert WDL class between players (e.g., Loss<->Win)."""
-        return (self.num_wdl_classes - 1) - int(wdl_class)
+    def _invert_perspective(self, wdl_score: float) -> float:
+        """Convert WDL score between players (e.g., Loss<->Win)."""
+        return float(self.num_wdl_classes - 1) - wdl_score
 
     def _prepare_board_for_encoding(self, board: chess.Board) -> chess.Board:
         """
@@ -122,18 +125,54 @@ class NeuralSearcher:
 
         return out
         
-    def evaluate_nn(self, board: chess.Board) -> Tuple[int, float]:
+    def evaluate_nn(self, board: chess.Board) -> Tuple[float, float]:
         # Count pieces
-        num_on_board = len(board.piece_map())
+        piece_map = board.piece_map()
+        num_on_board = len(piece_map)
         
-        if num_on_board < self.num_pieces:
-            # Fewer pieces than model expects (capture occurred)
-            # In 3-piece endgames, this is always a draw
-            return 1, 0.0  # Draw, DTZ=0
-            
-        if num_on_board > self.num_pieces:
-            # More pieces? Shouldn't happen in this PoC but handle just in case
-            return 1, 0.0
+        # Determine current material (ignoring color for piece types)
+        # We use a sorted tuple of piece types as a simplified material signature
+        current_pieces = sorted([p.piece_type for p in piece_map.values()])
+
+        # If this is the first evaluation, establish expected material
+        if self.expected_pieces is None:
+            self.expected_pieces = current_pieces
+
+        # Handle terminal states with perfect information
+        if board.is_game_over():
+            res = board.result()
+            if res == "1-0":
+                wdl_white = float(self.num_wdl_classes - 1)
+            elif res == "0-1":
+                wdl_white = 0.0
+            else:
+                # Draw (usually class 1 in 3-class, or 2 in 5-class)
+                wdl_white = 1.0 if self.num_wdl_classes == 3 else 2.0
+            return wdl_white, 0.0
+
+        if num_on_board != self.num_pieces or current_pieces != self.expected_pieces:
+            # Material changed (capture or promotion)
+            # Try to use Syzygy if available, otherwise assume draw
+            try:
+                true_wdl = self.tablebase.probe_wdl(board)
+                if self.num_wdl_classes == 5:
+                    if true_wdl == -2: mapped_wdl = 0
+                    elif true_wdl == -1: mapped_wdl = 1
+                    elif true_wdl == 0: mapped_wdl = 2
+                    elif true_wdl == 1: mapped_wdl = 3
+                    else: mapped_wdl = 4
+                else:
+                    if true_wdl < 0: mapped_wdl = 0  # -2 and -1
+                    elif true_wdl == 0: mapped_wdl = 1
+                    else: mapped_wdl = 2  # 1 and 2
+                
+                # Convert to White's perspective
+                if board.turn == chess.BLACK:
+                    return self._invert_perspective(float(mapped_wdl)), 0.0
+                return float(mapped_wdl), 0.0
+            except:
+                # Fallback to Draw
+                return (1.0 if self.num_wdl_classes == 3 else 2.0), 0.0
             
         original_turn = board.turn
         board_enc = self._prepare_board_for_encoding(board)
@@ -148,18 +187,25 @@ class NeuralSearcher:
         
         with torch.no_grad():
             wdl_logits, dtz_val = self.model(x_tensor)
-            wdl_stm = int(torch.argmax(wdl_logits, dim=1).item())
+            # Use softmax to get a more granular score instead of just argmax
+            probs = torch.softmax(wdl_logits, dim=1).squeeze(0)
+            
+            # Calculate expected WDL value
+            score_stm = 0.0
+            for i in range(self.num_wdl_classes):
+                score_stm += probs[i].item() * i
+            
             dtz = dtz_val.item()
             
         # Convert from side-to-move perspective to White's perspective for minimax.
-        wdl_white = self._invert_perspective(wdl_stm) if original_turn == chess.BLACK else wdl_stm
+        wdl_white = self._invert_perspective(score_stm) if original_turn == chess.BLACK else score_stm
             
         return wdl_white, dtz
 
     def minimax(self, board: chess.Board, depth: int, alpha: float, beta: float, is_maximizing: bool) -> float:
         if depth == 0 or board.is_game_over():
-            wdl_class, _ = self.evaluate_nn(board)
-            return float(wdl_class)
+            wdl_score, _ = self.evaluate_nn(board)
+            return wdl_score
 
         if is_maximizing:
             max_eval = -float('inf')
@@ -239,9 +285,15 @@ class NeuralSearcher:
                     try:
                         true_wdl = self.tablebase.probe_wdl(board)
                         if self.num_wdl_classes == 5:
-                            mapped_wdl = 0 if true_wdl == -2 else (1 if true_wdl == -1 else (2 if true_wdl == 0 else (3 if true_wdl == 1 else 4)))
+                            if true_wdl == -2: mapped_wdl = 0
+                            elif true_wdl == -1: mapped_wdl = 1
+                            elif true_wdl == 0: mapped_wdl = 2
+                            elif true_wdl == 1: mapped_wdl = 3
+                            else: mapped_wdl = 4
                         else:
-                            mapped_wdl = 0 if true_wdl == -2 else (1 if true_wdl == 0 else 2)
+                            if true_wdl < 0: mapped_wdl = 0
+                            elif true_wdl == 0: mapped_wdl = 1
+                            else: mapped_wdl = 2
                         valid_boards.append((board.copy(), mapped_wdl))
                         if len(valid_boards) >= samples: break
                     except:
@@ -253,6 +305,9 @@ class NeuralSearcher:
         results = {d: {"correct": 0, "total": 0} for d in depths}
         
         for i, (board, true_wdl) in enumerate(valid_boards):
+            # Reset expected pieces for each new position in accuracy verification
+            self.expected_pieces = None
+            
             if (i + 1) % (max(1, samples // 10)) == 0:
                 print(f"Processed {i+1}/{len(valid_boards)} positions...")
                 

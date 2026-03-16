@@ -286,11 +286,18 @@ def encode_board_relative(board: chess.Board, use_move_distance: bool = False, v
         
         if version == 4:
             # Pawn promotion progress
+            # After perspective normalization, if it was BLACK's turn the board was
+            # flipped → all pawns are now WHITE and advance toward rank 7 → rank/7.0 ✓
+            # If it was WHITE's turn, no flip occurred → WHITE pawns advance toward
+            # rank 7 (rank/7.0 ✓), but BLACK pawns advance toward rank 0, so their
+            # progress must be (7-rank)/7.0.
             progress = 0.0
             if piece.piece_type == chess.PAWN:
-                # White pawn rank (normalized 1.0 at promotion rank 7)
                 rank = chess.square_rank(square)
-                progress = rank / 7.0
+                if piece.color == chess.WHITE:
+                    progress = rank / 7.0
+                else:
+                    progress = (7 - rank) / 7.0
             encoding.append(progress)
     
     # 2. Encode pairwise relationships
