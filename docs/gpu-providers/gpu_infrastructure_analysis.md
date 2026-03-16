@@ -1,0 +1,42 @@
+# Análisis de Infraestructura GPU para Neural Tablebases
+
+Este documento recoge la comparativa de opciones de alquiler de GPU realizada en marzo de 2026 para optimizar el entrenamiento de los modelos de compresión de piezas de ajedrez.
+
+## 1. Escenario Actual del Proyecto
+- **Fase:** Optimización y pulido de finales de 3 y 4 piezas (KPvKP, etc.).
+- **Necesidades:** Entrenamientos rápidos de modelos MLP, datasets de tamaño manejable (Gigabytes).
+- **Prioridad:** Agilidad de iteración y bajo coste por experimento.
+
+## 2. Comparativa de Proveedores (Precios Marzo 2026)
+
+| Proveedor | Modelo GPU | Precio/h | Características Clave |
+| :--- | :--- | :--- | :--- |
+| **OVH AI Notebook** | NVIDIA L4 (24GB) | 0,83 € | Cuadernos listos para usar, **Object Storage ilimitado**. |
+| **OVH AI Notebook** | NVIDIA A100 (80GB) | 3,00 € | Máxima memoria para modelos grandes, almacenamiento incluido. |
+| **RunPod (Community)**| NVIDIA RTX 4090 (24GB)| ~$0.35 - $0.50 | **Mejor relación potencia/precio** para modelos actuales. |
+| **Lambda Labs** | NVIDIA H100 (80GB) | ~$2.30 | Referencia en gama alta "on-demand" (fuera de grandes clouds). |
+| **Vast.ai** | Varios | <$0.30 | El más barato (marketplace), pero con fiabilidad variable. |
+
+## 3. Recomendaciones Estratégicas
+
+### Fase A: Pulido de 3 y 4 piezas (Actual)
+Para esta fase, las GPUs de consumo de gama alta son superiores en coste-efectividad.
+- **Recomendación:** Usar **RunPod o Vast.ai** con instancias de **RTX 4090**.
+- **Justificación:** La arquitectura de la 4090 es extremadamente eficiente para los modelos MLP que estamos usando. Un entrenamiento típico de 30-50 épocas costará menos de 0,50€.
+
+### Fase B: Escalado a 5 y 6 piezas (Futuro)
+Cuando el número de piezas aumenta, el cuello de botella se desplaza de la GPU al almacenamiento y la gestión de datos.
+- **Recomendación:** Considerar **OVH** o soluciones con almacenamiento masivo.
+- **Justificación:** Los datasets de 6 piezas pueden ocupar Terabytes. El **Object Storage ilimitado de OVH** elimina la preocupación por los costes de almacenamiento y las tasas de transferencia (egress fees), que en AWS o GCP serían prohibitivas.
+
+## 4. Resumen de Decisión
+| Si buscas... | Elige... |
+| :--- | :--- |
+| **Mínimo coste por hora** | Vast.ai (RTX 4090/3090) |
+| **Equilibrio y facilidad** | RunPod |
+| **Privacidad EU y Datos Masivos** | OVH Cloud |
+| **Máximo rendimiento (H100/A100)** | Lambda Labs |
+
+---
+**Fecha de análisis:** 16 de marzo de 2026  
+**Nota:** Precios sujetos a variaciones de mercado y disponibilidad de subastas (spot instances).
