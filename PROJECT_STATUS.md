@@ -1,6 +1,6 @@
 # Project Status
 
-**Last Updated:** March 14, 2026, 00:30 AM
+**Last Updated:** March 18, 2026, 13:18 PM
 
 ## 🎯 Current Objective
 
@@ -30,6 +30,11 @@ Implement and validate canonical forms for 50% dataset reduction while maintaini
 4. **WDL 5 Classes Support**
    - Fully integrated for 5-piece endgames ✅
    - Auto-detection in analysis tools ✅
+
+5. **Hardware Acceleration (AMD GPU)** (NEW)
+   - **DirectML** support for Windows added ✅
+   - **10x speedup** on AMD Radeon 780M (1.1s/epoch vs 12s on CPU) ✅
+   - Dual-environment support (Python 3.12 for GPU training) ✅
 
 ### In Progress 🔄
 

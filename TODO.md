@@ -6,6 +6,7 @@ KPvKP_canonical: 96.78% val_acc (3.7M pos) ✓
 KRPvKP: 94.1% (5p, epoch 8+) ✓
 Pendientes: KRvKP, KBPvK, KRvKN, KQvKQ
 BUG search_poc.py: FIXED ✅
+GPU (AMD 780M): DirectML active (1.1s/epoch) ✅
 ```
 
 ## 🎯 IMMEDIATE (HOY - 2h)

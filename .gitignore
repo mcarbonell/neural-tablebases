@@ -4,4 +4,6 @@ data/
 
 
 __pycache__
-*.pyc
+*.pycvenv_gpu/
+
+venv_gpu/

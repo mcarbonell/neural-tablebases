@@ -8,7 +8,7 @@ import sys
 import json
 from datetime import datetime
 
-def train_model(dataset_path, model_name, epochs=100, batch_size=1024, learning_rate=0.001):
+def train_model(dataset_path, model_name, epochs=100, batch_size=1024, learning_rate=0.001, python_exe=None):
     """Train a model on a dataset."""
     print(f"\nTraining {model_name} on {dataset_path}...")
     
@@ -20,8 +20,9 @@ def train_model(dataset_path, model_name, epochs=100, batch_size=1024, learning_
     log_file = os.path.join(output_dir, f"train_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
     
     # Command (using correct arguments from train.py)
+    python_cmd = python_exe if python_exe else sys.executable
     cmd = [
-        sys.executable, "src/train.py",
+        python_cmd, "src/train.py",
         "--data_path", dataset_path,
         "--epochs", str(epochs),
         "--batch_size", str(batch_size),
@@ -52,9 +53,16 @@ def train_model(dataset_path, model_name, epochs=100, batch_size=1024, learning_
             final_dtz_mae = None
             
             for line in lines:
-                if "Final WDL Accuracy" in line:
+                if "Best validation accuracy" in line:
+                    # Input is typically 0.9991, convert to 99.91%
+                    final_accuracy = float(line.split(':')[1].strip()) * 100
+                elif "Best validation DTZ MAE" in line:
+                    final_dtz_mae = float(line.split(':')[1].strip())
+                elif "Final WDL Accuracy" in line:
+                    # Backward compatibility
                     final_accuracy = float(line.split(':')[1].strip().replace('%', ''))
                 elif "Final DTZ MAE" in line:
+                    # Backward compatibility
                     final_dtz_mae = float(line.split(':')[1].strip())
             
             return {
@@ -160,13 +168,22 @@ def main():
     batch_size = 1024
     learning_rate = 0.001
     
+    # Check for GPU virtual environment
+    gpu_python = os.path.join(os.getcwd(), "venv_gpu", "Scripts", "python.exe")
+    python_exe = gpu_python if os.path.exists(gpu_python) else sys.executable
+    if python_exe == gpu_python:
+        print(f"Using GPU environment: {gpu_python}")
+    else:
+        print(f"Using default environment: {sys.executable}")
+    
     # Train KQvK canonical
     result = train_model(
         dataset_path="data/KQvK_canonical.npz",
         model_name="kqvk_canonical",
         epochs=epochs,
         batch_size=batch_size,
-        learning_rate=learning_rate
+        learning_rate=learning_rate,
+        python_exe=python_exe
     )
     canonical_results['KQvK_canonical'] = result
     
@@ -176,7 +193,8 @@ def main():
         model_name="krvk_canonical",
         epochs=epochs,
         batch_size=batch_size,
-        learning_rate=learning_rate
+        learning_rate=learning_rate,
+        python_exe=python_exe
     )
     canonical_results['KRvK_canonical'] = result
     
@@ -186,7 +204,8 @@ def main():
         model_name="kpvk_canonical",
         epochs=epochs,
         batch_size=batch_size,
-        learning_rate=learning_rate
+        learning_rate=learning_rate,
+        python_exe=python_exe
     )
     canonical_results['KPvK_canonical'] = result
     

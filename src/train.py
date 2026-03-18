@@ -171,8 +171,24 @@ class TablebaseDataset(Dataset):
         return x, wdl, dtz
 
 def train(args):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Training on: {device}")
+    # Support for AMD GPUs via DirectML on Windows
+    # If CUDA is available, use it (standard for NVIDIA)
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        try:
+            # Try to use torch_directml if available
+            import torch_directml
+            device = torch_directml.device()
+            # Verify it's actually working (sometimes it fails silently)
+            _ = torch.tensor([1.0], device=device)
+            print(f"Using AMD GPU/RPU via DirectML: {device}")
+        except (ImportError, Exception):
+            # Fallback to CPU
+            device = torch.device("cpu")
+            print("DirectML not available or failed. Using CPU.")
+    
+    print(f"Final training device: {device}")
     
     # Create logs directory
     os.makedirs("logs", exist_ok=True)

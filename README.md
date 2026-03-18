@@ -63,6 +63,26 @@ The generator always writes a `*_metadata.json` next to the `.npz`. When `--limi
 python src/train.py --data_path data/KPvKP_canonical.npz --model mlp --epochs 30 --model_name mlp_kpvkp_v4_canonical
 ```
 
+### GPU Acceleration (AMD/Windows)
+
+The project supports GPU acceleration on Windows via **DirectML**, especially optimized for AMD Radeon GPUs (like the 780M).
+
+1. Install the GPU environment:
+   ```powershell
+   winget install --id Python.Python.3.12
+   py -3.12 -m venv venv_gpu
+   .\venv_gpu\Scripts\activate
+   pip install torch torchvision numpy torch-directml
+   ```
+2. Training with GPU:
+   ```bash
+   # Running via train_canonical.py (auto-detects venv_gpu)
+   python train_canonical.py
+   
+   # Or manually
+   .\venv_gpu\Scripts\python.exe src/train.py --data_path data/KQvK_canonical.npz
+   ```
+
 ### Analyze Results
 
 ```bash
@@ -237,7 +257,7 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** March 13, 2026  
-**Status:** Active Development  
+**Last Updated:** March 18, 2026  
+**Status:** Active Development (GPU Accelerated)  
 **Current Focus:** 4-piece endgames validation  
 **Author:** Mario Carbonell
