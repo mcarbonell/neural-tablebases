@@ -23,6 +23,7 @@ import json
 import math
 import random
 from datetime import timedelta, datetime
+import shutil
 
 # Import encoding functions from original script
 sys.path.append(os.path.dirname(__file__))
@@ -301,14 +302,16 @@ def process_chunk(args):
 def generate_dataset_parallel(syzygy_path: str, output_dir: str, config: str, 
                               compact: bool = True, relative: bool = False, 
                               use_move_distance: bool = False, canonical: bool = False,
-                              num_workers: int = None, chunk_size: int = 10000,
+                              num_workers: Optional[int] = None, chunk_size: int = 10000,
                               enumeration: EnumerationMode = "permutation",
                               canonical_mode: str = "auto",
                               version: int = 1,
                               turns: str = "auto",
                               limit_items: Optional[int] = None,
                               item_offset: int = 0,
-                              shuffle_seed: Optional[int] = None):
+                              shuffle_seed: Optional[int] = None,
+                              indexing_mode: str = "sequential",
+                              sharded: bool = False):
     """
     Generate dataset using parallel processing with incremental disk writing.
     
@@ -329,6 +332,8 @@ def generate_dataset_parallel(syzygy_path: str, output_dir: str, config: str,
         limit_items: Process only the first N items (debugging/smoke tests)
         item_offset: Skip the first N items in the chosen index order (resume / avoid prefixes)
         shuffle_seed: Deterministically shuffle the index order (helps pawn endgames with small limits)
+        indexing_mode: "sequential" or "shuffled" (derived from shuffle_seed)
+        sharded: If True, save output as multiple small files (shards) instead of one large file.
     """
     if not os.path.exists(syzygy_path):
         raise ValueError(f"Syzygy path {syzygy_path} not found.")
@@ -400,15 +405,26 @@ def generate_dataset_parallel(syzygy_path: str, output_dir: str, config: str,
 
     full_total_items = space_size
 
-    indexing_mode = "sequential"
-    shuffle_start = 0
-    shuffle_stride = 1
-    if shuffle_seed is not None:
-        indexing_mode = "shuffled"
-        rng = random.Random(int(shuffle_seed))
+    # indexing_mode is now passed as an argument, but derived from shuffle_seed in main
+    # if shuffle_seed is not None:
+    #     indexing_mode = "shuffled"
+    #     rng = random.Random(int(shuffle_seed))
+    #     shuffle_start = rng.randrange(space_size)
+    #     shuffle_stride = _choose_coprime_stride(space_size, rng)
+    # else:
+    #     indexing_mode = "sequential"
+    #     shuffle_start = 0
+    #     shuffle_stride = 1
+    
+    # Determine shuffle_start and shuffle_stride based on indexing_mode and shuffle_seed
+    if indexing_mode == "shuffled":
+        rng = random.Random(int(shuffle_seed)) # type: ignore
         shuffle_start = rng.randrange(space_size)
         shuffle_stride = _choose_coprime_stride(space_size, rng)
-    
+    else: # sequential
+        shuffle_start = 0
+        shuffle_stride = 1
+
     # Determine number of workers
     if num_workers is None:
         num_workers = min(cpu_count(), 8)  # Cap at 8 to avoid overhead
@@ -432,9 +448,9 @@ def generate_dataset_parallel(syzygy_path: str, output_dir: str, config: str,
     
     chunks = []
     for i in range(num_chunks):
-        item_start = item_offset + i * chunk_size
-        count = min(chunk_size, (item_offset + total_items) - item_start)
-        chunks.append((i, syzygy_path, all_pieces, item_start, count,
+        item_start_for_chunk = item_offset + i * chunk_size
+        count = min(chunk_size, (item_offset + total_items) - item_start_for_chunk)
+        chunks.append((i, syzygy_path, all_pieces, item_start_for_chunk, count,
                       compact, rel_arg, use_move_distance, canonical,
                       enumeration, canonical_mode, turns_list,
                       indexing_mode, shuffle_start, shuffle_stride, space_size))
@@ -492,38 +508,6 @@ def generate_dataset_parallel(syzygy_path: str, output_dir: str, config: str,
     print(f"\nCombining {completed_chunks} chunks...")
     
     # Combine all chunks
-    all_positions = []
-    all_wdl = []
-    all_dtz = []
-    
-    for i in range(num_chunks):
-        chunk_file = os.path.join(temp_dir, f"chunk_{i:06d}.npz")
-        if os.path.exists(chunk_file):
-            data = np.load(chunk_file)
-            all_positions.append(data['x'])
-            all_wdl.append(data['wdl'])
-            all_dtz.append(data['dtz'])
-            data.close()  # Close file before removing
-            os.remove(chunk_file)
-    
-    if not all_positions:
-        print(f"No valid positions found for {config}.")
-        print("Hint: increase --limit-items, change --enumeration, or avoid biased prefixes for pawn endgames.")
-        os.rmdir(temp_dir)
-        return
-
-    # Concatenate
-    positions = np.concatenate(all_positions)
-    labels_wdl = np.concatenate(all_wdl)
-    labels_dtz = np.concatenate(all_dtz)
-    
-    # Remove temp directory
-    os.rmdir(temp_dir)
-    
-    valid_count = len(positions)
-    print(f"Found {valid_count:,} valid positions for {config}.")
-    
-    # Save final dataset
     base_name = f"{config}_canonical" if canonical else config
     complete = bool(total_items == full_total_items)
     if not complete:
@@ -535,15 +519,58 @@ def generate_dataset_parallel(syzygy_path: str, output_dir: str, config: str,
             parts.append(f"offset{int(item_offset)}")
         base_name = "_".join(parts)
 
-    output_path = os.path.join(output_dir, f"{base_name}.npz")
-    
-    np.savez_compressed(output_path,
-                        x=positions,
-                        wdl=labels_wdl,
-                        dtz=labels_dtz)
+    if sharded:
+        shards_dir = os.path.join(output_dir, f"{base_name}_shards")
+        os.makedirs(shards_dir, exist_ok=True)
+        print(f"Exporting sharded dataset to {shards_dir}...")
+        for i in range(num_chunks):
+            temp_chunk = os.path.join(temp_dir, f"chunk_{i:06d}.npz")
+            if os.path.exists(temp_chunk):
+                # Copy/Move the chunk to shards_dir
+                dest = os.path.join(shards_dir, f"shard_{i:06d}.npz")
+                shutil.move(temp_chunk, dest)
+        print(f"Sharded export complete: {num_chunks} files.")
+        valid_count = total_positions # For metadata and speed calculation
+    else:
+        # Concatenate and save single file
+        all_positions = []
+        all_wdl = []
+        all_dtz = []
+        for i in range(num_chunks):
+            chunk_file = os.path.join(temp_dir, f"chunk_{i:06d}.npz")
+            if os.path.exists(chunk_file):
+                data = np.load(chunk_file)
+                all_positions.append(data['x'])
+                all_wdl.append(data['wdl'])
+                all_dtz.append(data['dtz'])
+                data.close()
+                os.remove(chunk_file)
+        
+        if not all_positions:
+            print(f"No valid positions found for {config}.")
+            # The temp_dir cleanup is now handled globally below.
+            if os.path.exists(temp_dir) and not os.listdir(temp_dir):
+                os.rmdir(temp_dir)
+            return
+
+        # Concatenate
+        positions = np.concatenate(all_positions)
+        labels_wdl = np.concatenate(all_wdl)
+        labels_dtz = np.concatenate(all_dtz)
+        
+        valid_count = len(positions)
+        print(f"Found {valid_count:,} valid positions for {config}.")
+        
+        # Save final dataset
+        output_path = os.path.join(output_dir, f"{base_name}.npz")
+        np.savez_compressed(output_path, x=positions, wdl=labels_wdl, dtz=labels_dtz)
+        print(f"Saved to {output_path}")
+
+    # Remove temp directory
+    if os.path.exists(temp_dir) and not os.listdir(temp_dir):
+        os.rmdir(temp_dir)
     
     total_time = time.time() - start_time
-    print(f"Saved to {output_path}")
     print(f"Total time: {timedelta(seconds=int(total_time))}")
     print(f"Speed: {valid_count / total_time:.0f} positions/second")
 
@@ -581,15 +608,17 @@ def generate_dataset_parallel(syzygy_path: str, output_dir: str, config: str,
         "canonical_mode": canonical_mode if canonical else None,
         "canonical_action": canonical_action,
         "positions": int(valid_count),
-        "dimensions": int(positions.shape[1]),
+        "dimensions": int(positions.shape[1]) if not sharded else "N/A (sharded)",
         "dtypes": {
-            "x": str(positions.dtype),
-            "wdl": str(labels_wdl.dtype),
-            "dtz": str(labels_dtz.dtype),
+            "x": str(positions.dtype) if not sharded else "N/A (sharded)",
+            "wdl": str(labels_wdl.dtype) if not sharded else "N/A (sharded)",
+            "dtz": str(labels_dtz.dtype) if not sharded else "N/A (sharded)",
         },
+        "sharded": sharded,
+        "num_shards": num_chunks if sharded else 1,
     }
 
-    metadata_path = output_path.replace(".npz", "_metadata.json")
+    metadata_path = os.path.join(output_dir, f"{base_name}_metadata.json")
     with open(metadata_path, "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2, sort_keys=True)
     print(f"Metadata saved to {metadata_path}")
@@ -633,6 +662,8 @@ if __name__ == "__main__":
                        help="Number of parallel workers (default: CPU count, max 8)")
     parser.add_argument("--chunk-size", type=int, default=10000,
                        help="Number of base placements per chunk (default: 10000)")
+    parser.add_argument("--sharded", action="store_true",
+                       help="Save output as multiple small files (shards) instead of one large file")
     args = parser.parse_args()
     
     compact = not args.full
@@ -640,6 +671,9 @@ if __name__ == "__main__":
     print("=" * 60)
     print("PARALLEL NEURAL TABLEBASE DATASET GENERATOR")
     print("=" * 60)
+
+    # Determine indexing_mode based on shuffle_seed
+    indexing_mode = "shuffled" if args.shuffle_seed is not None else "sequential"
     
     generate_dataset_parallel(args.syzygy, args.data, args.config, 
                              compact=compact, relative=args.relative,
@@ -653,4 +687,6 @@ if __name__ == "__main__":
                              turns=args.turns,
                              limit_items=args.limit_items,
                              item_offset=args.item_offset,
-                             shuffle_seed=args.shuffle_seed)
+                             shuffle_seed=args.shuffle_seed,
+                             indexing_mode=indexing_mode,
+                             sharded=args.sharded)
