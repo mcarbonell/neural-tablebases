@@ -8,6 +8,8 @@
 
 > Compressing chess endgame tablebases by 80x using neural networks with geometric encoding
 
+**Neural Tablebases** es un sistema para comprimir tablas de finales de ajedrez (Syzygy) usando redes neuronales. El objetivo es lograr compresión con 100% de precisión.
+
 ## 🎯 Quick Results
 
 - **99.93% average accuracy** on 3-piece endgames
