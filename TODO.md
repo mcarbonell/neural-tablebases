@@ -2,18 +2,21 @@
 
 ## ✅ STATUS ACTUAL
 ```
-KPvKP_canonical: 96.78% val_acc (3.7M pos) ✓
+KPvK: 100.00% (V5 + Search D1) ✅ (NEW)
+KPvKP: 81% (v4) -> Goal: 99%+ with V5
 KRPvKP: 94.1% (5p, epoch 8+) ✓
-Pendientes: KRvKP, KBPvK, KRvKN, KQvKQ
-BUG search_poc.py: FIXED ✅
+Pendientes: Migrar todo el pipeline a Encoding V5 (King-first)
 GPU (AMD 780M): DirectML active (1.1s/epoch) ✅
 ```
 
 ## 🎯 IMMEDIATE (HOY - 2h)
 ```
-[ ] 1. TEST FIXED SEARCH (5min)
-    python src/search_poc.py --model data/mlp_kpvkp_v4_canonical_best.pth --config KPvKP --samples 1000 --depths 0,1,2
-    Esperado: Depth0=97%, Depth1=99.5%, Depth2=99.9%
+[ ] 1. GENERATE KPvKP V5 (Parallel)
+    python src/generate_datasets_parallel.py --config KPvKP --relative --version 5 --canonical --data data/v5
+[ ] 2. TRAIN KPvKP V5
+    python src/train.py --data_path data/v5/KPvKP_canonical.npz --epochs 200 --model_name mlp_kpvkp_v5
+[ ] 3. VERIFY SEARCH (Target 100%)
+    python src/verify_search_correction.py --onnx data/mlp_kpvkp_v5.onnx
 
 ```
 

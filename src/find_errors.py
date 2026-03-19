@@ -1,96 +1,100 @@
 import chess
 import chess.syzygy
+import onnxruntime as ort
+import numpy as np
+import os
 import argparse
-import random
-from search_poc import NeuralSearcher
+from generate_datasets import encode_board
 
-def find_errors(model_path, syzygy_path, config, num_samples=1000):
-    searcher = NeuralSearcher(model_path, syzygy_path)
+def find_errors(onnx_path, syzygy_path, config="KPvK", encoding_version=5, max_errors=20):
+    print(f"Loading ONNX model: {onnx_path}")
+    sess = ort.InferenceSession(onnx_path, providers=['CPUExecutionProvider'])
+    input_name = sess.get_inputs()[0].name
     
-    # Clean config name
-    config_clean = config.replace('_canonical', '')
-    if 'v' in config_clean:
-        white_side, black_side = config_clean.split('v')
+    print(f"Opening Syzygy: {syzygy_path}")
+    tablebase = chess.syzygy.open_tablebase(syzygy_path)
+    
+    # Pieces
+    if 'v' in config:
+        white_side, black_side = config.split('v')
     else:
-        white_side = config_clean[:-1]
-        black_side = config_clean[-1]
-
-    def symbols_to_pieces(symbols):
-        piece_map = {'k': chess.KING, 'q': chess.QUEEN, 'r': chess.ROOK, 'b': chess.BISHOP, 'n': chess.KNIGHT, 'p': chess.PAWN}
-        return [chess.Piece(piece_map[s.lower()], chess.WHITE) for s in symbols if s.lower() in piece_map]
-
-    w_pieces = symbols_to_pieces(white_side)
-    b_pieces = symbols_to_pieces(black_side)
-    for p in b_pieces: p.color = chess.BLACK
+        white_side = config[:-1]
+        black_side = config[-1]
+        
+    def symbols_to_pieces(symbols, color):
+        return [chess.Piece(chess.PIECE_SYMBOLS.index(s.lower()), color) for s in symbols]
+        
+    w_pieces = symbols_to_pieces(white_side, chess.WHITE)
+    b_pieces = symbols_to_pieces(black_side, chess.BLACK)
     all_pieces = w_pieces + b_pieces
-        
-    errors = []
-    print(f"Searching for errors in {config}...")
+    num_pieces = len(all_pieces)
     
-    attempts = 0
+    import itertools
+    print(f"Searching for errors in {config}...")
+    errors_found = 0
     checked = 0
-    while len(errors) < 15 and attempts < num_samples * 20:
-        attempts += 1
+    
+    rel_arg = f"v{encoding_version}"
+    
+    # Use a subset of squares or a sample to avoid taking forever if config is large
+    # For KPvK, 64^3 is small enough.
+    for squares in itertools.permutations(chess.SQUARES, num_pieces):
         board = chess.Board(None)
-        try:
-            squares = random.sample(chess.SQUARES, len(all_pieces))
-            for i, piece in enumerate(all_pieces):
-                board.set_piece_at(squares[i], piece)
-        except ValueError:
-            continue
-        
-        # Pawn rules
-        if any(board.piece_at(sq) and board.piece_at(sq).piece_type == chess.PAWN and 
-               chess.square_rank(sq) in [0, 7] for sq in chess.SQUARES):
-            continue
+        for i, piece in enumerate(all_pieces):
+            board.set_piece_at(squares[i], piece)
             
+        # Pawn ranks
+        invalid_pawn = False
+        for sq in squares:
+            p = board.piece_at(sq)
+            if p and p.piece_type == chess.PAWN:
+                r = chess.square_rank(sq)
+                if r == 0 or r == 7:
+                    invalid_pawn = True; break
+        if invalid_pawn: continue
+        
         for turn in [chess.WHITE, chess.BLACK]:
             board.turn = turn
-            if board.is_valid():
-                checked += 1
-                try:
-                    # Get side-to-move true WDL
-                    true_wdl = searcher.tablebase.probe_wdl(board)
-                    # Syzygy WDL is relative to STM.
-                    if searcher.num_wdl_classes == 5:
-                        stm_true = 0 if true_wdl == -2 else (1 if true_wdl == -1 else (2 if true_wdl == 0 else (3 if true_wdl == 1 else 4)))
-                    else:
-                        stm_true = 0 if true_wdl == -2 else (1 if true_wdl == 0 else 2)
-                    
-                    # Raw NN prediction (convert back to STM perspective)
-                    wdl_white_pred, _ = searcher.evaluate_nn(board)
-                    stm_pred = wdl_white_pred if board.turn == chess.WHITE else (searcher.num_wdl_classes - 1 - wdl_white_pred)
-                    
-                    if stm_pred != stm_true:
-                        # Find out if search fixes it
-                        d1_stm = searcher.get_search_wdl(board, 1)
-                        d3_stm = searcher.get_search_wdl(board, 3)
-                        
-                        errors.append({
-                            "fen": board.fen(),
-                            "true": stm_true,
-                            "pred": stm_pred,
-                            "d1": d1_stm,
-                            "d3": d3_stm
-                        })
-                        print(f"FOUND ERROR: {board.fen()} | True: {stm_true} | Pred: {stm_pred} | D1: {d1_stm} | D3: {d3_stm}")
-                        if len(errors) >= 15: break
-                except Exception as e:
-                    continue
-        if len(errors) >= 15: break
-    
-    print(f"\nChecked {checked} positions. Found {len(errors)} errors.")
-    
-    print("\n--- ANALYSIS OF HARD POSITIONS ---")
-    for e in errors:
-        fix_str = "FIXED" if e["d3"] == e["true"] else "STILL WRONG"
-        print(f"FEN: {e['fen']} | True: {e['true']} | Raw: {e['pred']} | D3: {e['d3']} -> {fix_str}")
+            if not board.is_valid(): continue
+            
+            checked += 1
+            if checked % 10000 == 0:
+                print(f"Checked {checked} positions... Found {errors_found} errors.")
+            
+            # Ground truth
+            wdl_true_raw = tablebase.probe_wdl(board)
+            # Map to 0, 1, 2
+            wdl_true = 0 if wdl_true_raw == -2 else (1 if wdl_true_raw == 0 else 2)
+            
+            # Prediction
+            encoding = encode_board(board, relative=rel_arg)
+            # Add batch dimension
+            inp = encoding.reshape(1, -1).astype(np.float32)
+            
+            out = sess.run(None, {input_name: inp})
+            wdl_logits = out[0]
+            wdl_pred = np.argmax(wdl_logits, axis=1)[0]
+            
+            if wdl_pred != wdl_true:
+                errors_found += 1
+                print(f"\n[ERROR {errors_found}]")
+                print(f"FEN: {board.fen()}")
+                print(f"True WDL: {wdl_true} | Pred WDL: {wdl_pred}")
+                
+                if errors_found >= max_errors:
+                    print(f"\nReached max errors ({max_errors}). stopping.")
+                    tablebase.close()
+                    return
+
+    tablebase.close()
+    print(f"Finished. Total checked: {checked}, Total errors: {errors_found}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, default="data/mlp_best.pth")
+    parser.add_argument("--onnx", type=str, default="data/mlp_kpvk_v5.onnx")
     parser.add_argument("--syzygy", type=str, default="syzygy")
-    parser.add_argument("--config", type=str, default="KPvKP")
+    parser.add_argument("--config", type=str, default="KPvK")
+    parser.add_argument("--version", type=int, default=5)
     args = parser.parse_args()
     
-    find_errors(args.model, args.syzygy, args.config)
+    find_errors(args.onnx, args.syzygy, args.config, args.version)

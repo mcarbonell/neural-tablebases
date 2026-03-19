@@ -4,7 +4,7 @@
 
 ## 🎯 Current Objective
 
-Implement and validate canonical forms for 50% dataset reduction while maintaining accuracy.
+Implement and validate Encoding V5 + Search Correction for perfect accuracy in 4-piece endgames.
 
 ## 📊 Progress Summary
 
@@ -12,14 +12,15 @@ Implement and validate canonical forms for 50% dataset reduction while maintaini
 
 ### Completed ✅
 
-1. **V4 Encoding Breakthrough** (NEW)
-   - Perspective normalization (Side-to-Move as White) ✅
-   - Pawn promotion progress feature ✅
-   - **SOLVED**: Race position `8/8/7P/p7/8/8/8/2k2K2 w` correctly identified ✅
-   - Applied to KPvKP and KRPvKP models ✅
+1. **Encoding V5 & Search Correction (Perfection Reach)** (NEW)
+   - **KPvK (3-Piece) reached 100.00% accuracy** (NN + Depth-1 Search) ✅
+   - **Encoding V5**: King-centric architecture (Slot 0 anchor) stabilizes learning ✅
+   - **Search Correction**: Minimax D1 eliminates 100% of remaining local errors ✅
+   - Total dataset reduction: 50% (Canonical) + perfect inference via search ✅
 
-2. **3-Piece Endgames (Legacy v1)**
-   - KQvK: 99.92%, KRvK: 99.99%, KPvK: 99.89% ✅
+2. **Hardware Acceleration (AMD GPU)**
+   - **DirectML** support for Windows fully operational ✅
+   - **1.1s/epoch** on Radeon 780M for 3-piece models ✅
 
 3. **Canonical Forms & Parallel Generation**
    - 50% dataset reduction achieved ✅

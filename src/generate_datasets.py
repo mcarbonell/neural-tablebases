@@ -39,6 +39,9 @@ def flip_board(board: chess.Board) -> chess.Board:
     return new_board
 
 def encode_board(board: chess.Board, compact: bool = True, relative: bool = False, use_move_distance: bool = False) -> np.ndarray:
+    if str(relative).lower() == 'v5':
+        return encode_board_relative(board, version=5)
+        
     if str(relative).lower() == 'v4':
         return encode_board_relative(board, version=4)
         
@@ -233,11 +236,16 @@ def encode_board_relative(board: chess.Board, use_move_distance: bool = False, v
     """
     Relative/geometric encoding that scales to any endgame.
     
-    Version 4 (New):
+    Version 5 (Experimental):
+        - Normalized perspective (side to move is always White)
+        - King is ALWAYS the first piece in its color block (Sorting: King first)
+        - Pawn promotion progress feature (standardized)
+        
+    Version 4 (Legacy):
         - Normalized perspective (side to move is always White)
         - Pawn promotion progress feature
     """
-    if version == 4:
+    if version >= 4:
         # Perspective normalization
         if board.turn == chess.BLACK:
             board = flip_board(board)
@@ -250,12 +258,20 @@ def encode_board_relative(board: chess.Board, use_move_distance: bool = False, v
         if piece:
             pieces_on_board.append((piece, square))
     
-    # Sort: White first, then Black; K,Q,R,B,N,P
-    # Since we normalized, White = Side to Move
-    pieces_on_board.sort(key=lambda x: (
-        0 if x[0].color == chess.WHITE else 1,
-        x[0].piece_type
-    ))
+    # Sort: White first, then Black.
+    # Within color: King first, then others (Q, R, B, N, P)
+    if version >= 5:
+        # King (6) is largest, Pawn (1) is smallest. Sort type DESCENDING.
+        pieces_on_board.sort(key=lambda x: (
+            0 if x[0].color == chess.WHITE else 1,
+            -x[0].piece_type
+        ))
+    else:
+        # Legacy sorting (Pawn first)
+        pieces_on_board.sort(key=lambda x: (
+            0 if x[0].color == chess.WHITE else 1,
+            x[0].piece_type
+        ))
     
     encoding = []
     
@@ -284,13 +300,10 @@ def encode_board_relative(board: chess.Board, use_move_distance: bool = False, v
         color = [1.0, 0.0] if piece.color == chess.WHITE else [0.0, 1.0]
         encoding.extend(color)
         
-        if version == 4:
+        if version >= 4:
             # Pawn promotion progress
-            # After perspective normalization, if it was BLACK's turn the board was
-            # flipped → all pawns are now WHITE and advance toward rank 7 → rank/7.0 ✓
-            # If it was WHITE's turn, no flip occurred → WHITE pawns advance toward
-            # rank 7 (rank/7.0 ✓), but BLACK pawns advance toward rank 0, so their
-            # progress must be (7-rank)/7.0.
+            # After perspective normalization, all White pawns advance toward rank 7
+            # All Black pawns advance toward rank 0.
             progress = 0.0
             if piece.piece_type == chess.PAWN:
                 rank = chess.square_rank(square)
@@ -340,11 +353,8 @@ def encode_board_relative(board: chess.Board, use_move_distance: bool = False, v
             encoding.extend(features)
     
     # 3. Side to move
-    # In v4, this is always 1.0 if we normalized. 
-    # We'll omit it to save a redundant float, but then dimensions change.
-    # Actually, let's keep it for compatibility with the generic loader if needed
-    # but the user said "remove side-to-move bit" in the plan.
-    if version != 4:
+    # In v4+, this is always 1.0 because we normalized.
+    if version < 4:
         encoding.append(1.0 if board.turn == chess.WHITE else 0.0)
     
     return np.array(encoding, dtype=np.float32)

@@ -358,8 +358,11 @@ def generate_dataset_parallel(syzygy_path: str, output_dir: str, config: str,
     
     # Handle encoding version (encode_board expects relative=True or relative="v4")
     rel_arg = relative
-    if relative and version == 4:
-        rel_arg = "v4"
+    if relative:
+        if version == 5:
+            rel_arg = "v5"
+        elif version == 4:
+            rel_arg = "v4"
 
     if turns not in {"auto", "both", "white_only"}:
         raise ValueError(f"Invalid turns mode: {turns!r}")
