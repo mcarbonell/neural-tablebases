@@ -132,44 +132,8 @@ class TablebaseDataset(Dataset):
     def __len__(self):
         return len(self.x)
 
-    def augment_horizontal_flip(self, x):
-        """
-        Applies horizontal flip to a v4 encoding vector.
-        - Piece col becomes 1 - col
-        - Pair dx becomes -dx
-        """
-        # We need to know where columns and dx's are
-        x_aug = x.clone()
-        num_pieces = self.num_pieces
-        
-        # 1. Flip piece columns
-        # Each piece has 11 dims: [row, col, k, q, r, b, n, p, w, b, progress]
-        for i in range(num_pieces):
-            col_idx = i * 11 + 1
-            x_aug[col_idx] = 1.0 - x_aug[col_idx]
-            
-        # 2. Flip pair dx
-        # Pairs start after pieces (11 * num_pieces)
-        # Each pair has 4 dims: [manhattan, chebyshev, dx, dy]
-        start_pairs = num_pieces * 11
-        num_pairs = (num_pieces * (num_pieces - 1)) // 2
-        for i in range(num_pairs):
-            dx_idx = start_pairs + (i * 4) + 2
-            x_aug[dx_idx] = -x_aug[dx_idx]
-            
-        return x_aug
-
     def __getitem__(self, idx):
-        x = self.x[idx]
-        wdl = self.wdl[idx]
-        dtz = self.dtz[idx]
-        
-        # Augmentation: Random horizontal flip for v4
-        if self.encoding_version == 4 and torch.rand(1) > 0.5:
-            x = self.augment_horizontal_flip(x)
-            
-        return x, wdl, dtz
-
+        return self.x[idx], self.wdl[idx], self.dtz[idx]
 def train(args):
     # Support for AMD GPUs via DirectML on Windows
     # If CUDA is available, use it (standard for NVIDIA)
@@ -259,8 +223,10 @@ def train(args):
     val_size = len(dataset) - train_size
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, 
+                              num_workers=4, pin_memory=True)
+    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, 
+                            num_workers=4, pin_memory=True)
 
     # Use adaptive model based on endgame complexity
     # Use dataset's detected WDL classes if available, otherwise use args
@@ -278,7 +244,7 @@ def train(args):
     # CrossEntropy with class weights and reduction='none' for hard example weighting
     criterion_wdl = nn.CrossEntropyLoss(weight=class_weights, reduction='none')
     criterion_dtz = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5, foreach=False)
     
     # Scheduler: More conservative ReduceLROnPlateau
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
@@ -308,6 +274,24 @@ def train(args):
         for batch_idx, (x, wdl, dtz) in enumerate(train_loader):
             x, wdl, dtz = x.to(device), wdl.to(device), dtz.to(device)
             
+            # --- Vectorized GPU Augmentation for V4 Encoding ---
+            if getattr(dataset, 'encoding_version', 0) == 4:
+                flip_mask = torch.rand(x.shape[0], device=device) > 0.5
+                if flip_mask.any():
+                    num_pieces = dataset.num_pieces
+                    # 1. Flip piece columns (1 - col)
+                    for i in range(num_pieces):
+                        col_idx = i * 11 + 1
+                        x[flip_mask, col_idx] = 1.0 - x[flip_mask, col_idx]
+                        
+                    # 2. Flip pair dx (-dx)
+                    start_pairs = num_pieces * 11
+                    num_pairs = (num_pieces * (num_pieces - 1)) // 2
+                    for i in range(num_pairs):
+                        dx_idx = start_pairs + (i * 4) + 2
+                        x[flip_mask, dx_idx] = -x[flip_mask, dx_idx]
+            # ---------------------------------------------------
+
             optimizer.zero_grad()
             wdl_logits, dtz_pred = model(x)
             
