@@ -1,55 +1,72 @@
-# Mejoras propuestas (siguiente sesión)
+# Mejoras Propuestas
 
-**Fecha:** 14 de marzo de 2026  
-**Contexto:** ideas para escalar el proyecto tras V4 + canónicas pawn-safe.
+Fecha original: 14 de marzo de 2026
+Refresh documental: 20 de marzo de 2026
+Tipo: backlog tecnico util, no plan comprometido
 
-## 1) Escalado de datos (5+ piezas)
+## Contexto
 
-- **Entrenamiento “streaming” por shards**: evitar combinar todo en un único `.npz` gigante (RAM). Mantener los chunks/shards y entrenar leyendo por lotes.
-- **Formato recomendado**:
-  - Opción A: `data/ENDGAME/shards/*.npz` (cada shard: `x`, `wdl`, `dtz`, `metadata`).
-  - Opción B: convertir a `.npy` + `np.memmap` para lecturas secuenciales rápidas (menos overhead que `.npz`).
-- **Split reproducible**: split train/val por hash determinista (p.ej. hash de `canonical_key` o del índice de shard+offset), para que no dependa del orden de lectura.
+Estas ideas nacieron tras la etapa V4 + canonicas pawn-safe. Muchas siguen siendo buenas. Lo que cambio es el contexto: la linea activa del repo ya se apoya en KPvKP canonical `v5`, metadata mas rica y entrenamiento en marcha.
 
-## 2) “Exception maps” end-to-end (objetivo final del proyecto)
+## Propuestas Que Siguen Fuertes
 
-- **Pipeline estándar**: `train → verify/search → recolectar errores → guardar mapa de excepciones → medir tamaño final + 100%`.
-- **Representación**:
-  - Clave: algo estable y compacto (p.ej. `canonical_key` serializado o encoding cuantizado).
-  - Valor: WDL/DTZ verdadero (y opcionalmente “best move” si se quiere jugar).
-- **Métrica principal**: tamaño final = `modelo (INT8/FP16) + exception-map comprimido` frente a Syzygy, con exactitud/garantía.
+### 1. Entrenamiento streaming por shards
 
-## 3) Reproducibilidad fuerte (metadatos)
+Sigue siendo probablemente una de las mejoras tecnicas mas importantes para escalar a datasets mayores sin depender de un `.npz` monolitico.
 
-- Guardar en metadata:
-  - `git_commit` (hash), parámetros completos, `shuffle_seed`/`item_offset`, `chunk_size`.
-  - versión de Python/Torch/python-chess/numpy.
-  - seed de entrenamiento y seed del split.
-- Validar que `search_poc.py` aplica exactamente la misma normalización/canonización esperada por el modelo (ya hay metadata, falta estandarizarlo).
+### 2. Exception maps end-to-end
 
-## 4) Tests + CI (mínimo viable)
+Sigue encajando muy bien con la filosofia del proyecto:
 
-- **Smoke tests**:
-  - Generación parcial con peones usando `--shuffle-seed` (evita prefijos sesgados).
-  - Canónicas en finales con peones: asegurar que `auto` usa `file_mirror`.
-  - Verificar que se escriben `*_metadata.json` y que el nombre `_partial_...` no pisa datasets completos.
-- **GitHub Actions**:
-  - `python -m py_compile` + un smoke-test rápido (sin Syzygy si no está en CI, o con un “stub”).
+- modelo compacto
+- correccion por busqueda
+- mapa pequeno para residuos dificiles
 
-## 5) Ergonomía de CLI / defaults
+### 3. Reproducibilidad fuerte
 
-- `train.py`: `--hard_mining` hoy está activado por defecto; añadir un flag claro para desactivarlo (`--no-hard_mining`) o invertir el default.
-- Añadir `--seed` para entrenamiento (y para el split) y volcarlo a metadata.
-- Unificar nombres: `--data`/`--output`/`--name` para que sea difícil entrenar sin querer sobre un dataset parcial.
+Esto ya no es una mejora "nice to have". Deberia tratarse como requisito basico.
 
-## 6) Benchmarks de evaluación
+### 4. Tests y smoke-tests
 
-- Reportar **accuracy por clase** (W/D/L), matriz de confusión, y calibración (probabilidades).
-- DTZ: además de MAE, percentiles (P50/P90/P99) y error condicionado por WDL.
-- Medir **velocidad de inferencia** (ms/posición) y el coste incremental del search depth (0/1/2).
+Sigue siendo prioritario, sobre todo en:
 
-## 7) Export/compresión del modelo (cuando el pipeline esté estable)
+- generacion parcial
+- modos canonicos con peones
+- metadata
+- nombres `_partial_...`
 
-- Export ONNX/TorchScript y cuantización (INT8) + comparación de accuracy.
-- QAT (quantization-aware training) si la cuantización post-training degrada demasiado.
+### 5. Ergonomia de CLI
 
+Todavia hay margen de mejora en defaults, seeds, y coherencia de nombres.
+
+### 6. Benchmarks de evaluacion
+
+Hace falta seguir mejorando la capa de evaluacion:
+
+- accuracy por clase
+- confusion matrix
+- percentiles DTZ
+- coste de busqueda por profundidad
+
+### 7. Export y cuantizacion
+
+Sigue siendo una pieza importante para el objetivo real de compresion utilizable.
+
+## Lo Que Cambiaria En La Priorizacion
+
+Si hoy hubiera que ordenar el backlog, yo lo pondria asi:
+
+1. reproducibilidad y metadata consistentes
+2. evaluacion fuerte y comparable
+3. shards / training streaming
+4. exception maps end-to-end
+5. ergonomia de CLI
+6. cuantizacion final
+
+## Nota De Freshness
+
+La referencia original a "tras V4 + canonicas" es historica. La linea activa ya no deberia describirse asi sin matizar que KPvKP se esta trabajando en la rama `v5`.
+
+---
+
+Estado actual: backlog tecnico util

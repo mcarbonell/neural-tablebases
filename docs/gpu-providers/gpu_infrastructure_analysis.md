@@ -1,85 +1,95 @@
-# Análisis de Infraestructura GPU para Neural Tablebases
+# GPU Infrastructure Analysis
 
-Este documento recoge la comparativa de opciones de alquiler de GPU realizada en marzo de 2026 para optimizar el entrenamiento de los modelos de compresión de piezas de ajedrez.
+This document summarizes the GPU-rental landscape considered in March 2026 for Neural Tablebases.
 
-## 1. Escenario Actual del Proyecto
-- **Fase:** Optimización y pulido de finales de 3 y 4 piezas (KPvKP, etc.).
-- **Necesidades:** Entrenamientos rápidos de modelos MLP, datasets de tamaño manejable (Gigabytes).
-- **Prioridad:** Agilidad de iteración y bajo coste por experimento.
+## Project Context
 
-## 2. Comparativa de Proveedores (Precios Marzo 2026)
+Current practical workload:
 
-| Proveedor | Modelo GPU | Precio/h | Características Clave |
-| :--- | :--- | :--- | :--- |
-| **OVH AI Notebook** | NVIDIA L4 (24GB) | 0,83 € | Cuadernos listos para usar, **Object Storage ilimitado**. |
-| **OVH AI Notebook** | NVIDIA A100 (80GB) | 3,00 € | Máxima memoria para modelos grandes, almacenamiento incluido. |
-| **RunPod (Community)**| NVIDIA RTX 4090 (24GB)| ~$0.35 - $0.50 | **Mejor relación potencia/precio** para modelos actuales. |
-| **Lambda Labs** | NVIDIA H100 (80GB) | ~$2.30 | Referencia en gama alta "on-demand" (fuera de grandes clouds). |
-| **Vast.ai** | Varios | <$0.30 | El más barato (marketplace), pero con fiabilidad variable. |
-| **Google Cloud (Spot)**| NVIDIA L4 (24GB) | ~$0.15 - $0.25 | **Excelente para ML moderno**, muy barato en modo Spot. |
-| **AWS (Spot)** | NVIDIA A10G (24GB) | ~$0.40 - $0.60 | Alta disponibilidad, pero costes de salida de datos (egress). |
+- MLP-heavy training
+- datasets in the MB-to-GB range rather than multi-terabyte scale
+- active emphasis on KPvKP canonical V5 training and iterative evaluation
 
+This means the project currently benefits more from cheap iteration than from extreme multi-GPU scale.
 
-## 3. Recomendaciones Estratégicas
+## Strategic Recommendation
 
-### Fase A: Pulido de 3 y 4 piezas (Actual)
-Para esta fase, las GPUs de consumo de gama alta son superiores en coste-efectividad.
-- **Recomendación:** Usar **RunPod o Vast.ai** con instancias de **RTX 4090**.
-- **Justificación:** La arquitectura de la 4090 es extremadamente eficiente para los modelos MLP que estamos usando. Un entrenamiento típico de 30-50 épocas costará menos de 0,50€.
+### Best fit for the current phase
 
-### Fase B: Escalado a 5 y 6 piezas (Futuro)
-Cuando el número de piezas aumenta, el cuello de botella se desplaza de la GPU al almacenamiento y la gestión de datos.
-- **Recomendación:** Considerar **OVH** o soluciones con almacenamiento masivo y **GCP (Google Cloud)**.
-- **Justificación:** Los datasets de 6 piezas pueden ocupar cientos de Gigabytes. 
-    - **OVH:** El **Object Storage ilimitado** elimina la preocupación por los costes de almacenamiento y las tasas de transferencia (egress fees).
-    - **Google Cloud (L4 Spot):** La GPU NVIDIA L4 en GCP es excepcionalmente eficiente en coste/rendimiento para inferencia y entrenamiento ligero. Si se usan Buckets de Google (GCS) en la misma región, el tráfico es gratuito.
+- Consumer/high-end single-GPU rentals remain the best cost-performance choice.
+- RTX 4090-class hardware is still the most attractive option for typical experiments.
+- RunPod and Vast.ai remain the most plausible low-cost platforms for this style of workload.
 
-### Fase C: Hiper-escaladores (GCP vs AWS)
-Si decides usar Google o Amazon, la clave es el uso de **Spot Instances** (instancias que pueden ser reclamadas por el proveedor a cambio de un 60-90% de descuento).
+### When to move up-market
 
-| Característica | Google Cloud (GCP) | Amazon Web Services (AWS) |
-| :--- | :--- | :--- |
-| **GPU Recomendada** | **L4 (Ada Lovelace)** - 24GB | **G5 (A10G)** - 24GB |
-| **Ventaja** | Mejor precio por TFLOPS en Spot. | Máxima fiabilidad y ecosistema. |
-| **Punto Débil** | Disponibilidad de Spot variable. | Costes de red muy altos (Egress). |
-| **Servicio Managed** | Vertex AI | SageMaker |
+Move toward providers such as OVH, GCP, or larger managed platforms when:
 
-> [!WARNING]
-> **Cuidado con el Egress:** AWS y GCP cobran significativamente por sacar datos de su red. Si entrenas allí, intenta mantener los datasets y los modelos resultantes dentro de sus respectivos buckets (S3/GCS) o usa **Cloudflare R2** para evitar estas tasas.
+- dataset storage becomes the bottleneck
+- training jobs become long enough that operational stability matters more than raw price
+- 5-piece and 6-piece experiments start demanding more robust data locality and orchestration
 
+## Provider Snapshot
 
-## 4. Resumen de Decisión
-| **Si buscas...** | **Elige...** |
-| :--- | :--- |
-| **Mínimo coste por hora** | Vast.ai (RTX 4090/3090) |
-| **Equilibrio y facilidad** | RunPod |
-| **Escalado profesional (Spot)** | **Google Cloud (L4 Instances)** |
-| **Privacidad EU y Datos Masivos** | OVH Cloud |
-| **Máximo rendimiento (H100/A100)** | Lambda Labs |
+Prices below are the rough March 2026 references captured during analysis and should be treated as directional, not fixed.
+
+| Provider | Typical GPU | Approx. Price/h | Best Use |
+|----------|-------------|-----------------|----------|
+| RunPod | RTX 4090 | `$0.35-$0.50` | best general value for current experiments |
+| Vast.ai | mixed marketplace | `<$0.30` | minimum cost, lower reliability |
+| OVH AI Notebook | L4 / A100 | `0.83 EUR / 3.00 EUR` | stronger storage and EU-friendly hosting |
+| Google Cloud Spot | L4 | `$0.15-$0.25` | strong cloud option if spot capacity is available |
+| AWS Spot | A10G | `$0.40-$0.60` | good ecosystem, weaker on egress costs |
+| Lambda Labs | H100-class options | `~$2.30` | premium high-end experiments |
+
+## Practical Guidance For This Repo
+
+### If the goal is cheap iteration
+
+Use:
+
+- local DirectML on AMD when convenient
+- RunPod or Vast.ai when you need stronger NVIDIA throughput
+
+### If the goal is more stable medium-scale work
+
+Use:
+
+- OVH if EU locality and storage simplicity matter
+- GCP Spot if you can tolerate preemption and keep data in-region
+
+### If the goal is maximum convenience
+
+Use:
+
+- a managed cloud setup with storage close to compute
+- but only when the project actually grows beyond the current single-model cadence
+
+## Main Risk
+
+The main cloud cost trap is not GPU hourly price. It is data movement and storage architecture.
+
+For this project, bad data locality can erase the savings from cheap GPU time.
+
+## Free Or Nearly Free Options
+
+- Google Colab for quick prototypes
+- Kaggle Notebooks for limited weekly free GPU time
+- SageMaker Studio Lab for lightweight no-card experimentation
+- free cloud credits from GCP/Azure/AWS programs for short validation bursts
+
+These are useful for prototyping, but they are not the main recommendation for repeatable project workflows.
+
+## Decision Summary
+
+| If you want... | Choose... |
+|----------------|-----------|
+| lowest cost | Vast.ai |
+| easiest cheap iteration | RunPod |
+| better storage story | OVH |
+| cloud spot efficiency | GCP L4 Spot |
+| premium top-end compute | Lambda Labs |
 
 ---
-**Fecha de análisis:** 16 de marzo de 2026  
-**Nota:** Precios sujetos a variaciones de mercado y disponibilidad de subastas (spot instances).
 
----
-
-## 5. Análisis de Opciones Gratuitas (Marzo 2026)
-Para la fase de experimentación o para proyectos con presupuesto limitado, existen excelentes opciones para acceder a cómputo de GPU sin coste.
-
-### A. Entornos de Notebooks (Completamente Gratuitos)
-Son ideales para empezar, hacer prototipos y para entrenamientos de tamaño pequeño o mediano. No requieren tarjeta de crédito.
-
-*   **Google Colab:** La opción más popular. Ofrece acceso gratuito a GPUs como las NVIDIA T4. Es una excelente manera de obtener una cantidad considerable de cómputo por semana sin coste alguno.
-*   **Kaggle Notebooks:** Similar a Colab, Kaggle proporciona un entorno con GPUs gratuitas (generalmente NVIDIA P100 o T4) y una cuota semanal de aproximadamente 30 horas.
-*   **Amazon SageMaker Studio Lab:** La alternativa de AWS a Colab. Ofrece cómputo y 15GB de almacenamiento persistente de forma gratuita, y no requiere una cuenta de AWS o tarjeta de crédito para empezar.
-
-### B. Créditos Gratuitos en Plataformas Cloud
-Estos proveedores ofrecen una cantidad de dinero en créditos para usar en sus servicios (incluyendo GPUs potentes) durante un tiempo limitado. Son perfectos para pruebas más intensivas.
-
-*   **Google Cloud Platform (GCP):** Ofrece **$300 en créditos gratuitos** para cuentas nuevas, válidos por 90 días. Esto puede financiar entre 30 y 100 horas de uso en GPUs potentes.
-*   **Microsoft Azure:** Proporciona **$200 en créditos gratuitos** para nuevos usuarios, válidos por 30 días.
-*   **Amazon Web Services (AWS):** A través de programas como **AWS Activate** (para startups) o **AWS Educate** (para estudiantes) se pueden conseguir importantes cantidades de créditos.
-
-### C. Recomendación para este Proyecto
-1.  **Empezar con Google Colab:** Es la forma más rápida y sencilla de realizar experimentos y validaciones sin ningún compromiso.
-2.  **Para pruebas intensivas, usar GCP:** Activar la prueba gratuita de **Google Cloud (GCP)** para aprovechar los $300 de crédito. Es la oferta de bienvenida más generosa y permitirá validar el rendimiento en hardware más avanzado antes de comprometerse a un proveedor de pago.
+Analysis date: March 16, 2026
+Documentation refresh: March 20, 2026

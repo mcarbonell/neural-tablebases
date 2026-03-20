@@ -1,35 +1,56 @@
-# Análisis: Búsqueda como Sistema de Corrección de Errores
+# Analisis: Busqueda Como Sistema De Correccion De Errores
 
-## 📌 Resumen del Hallazgo
-La mayor limitación de las redes neuronales para la compresión de tablebases es la presencia de "bolsas de error" locales: posiciones donde una red que es 99% precisa comete un error crítico (como evaluar un mate como tablas).
+Fecha original: 14 de marzo de 2026
+Refresh documental: 20 de marzo de 2026
+Tipo: PoC historica con implicaciones activas
 
-Este análisis documenta cómo una búsqueda **Minimax/Alpha-Beta** de muy baja profundidad actúa como un filtro de consistencia, parcheando estos errores sin aumentar el espacio en disco, a cambio de un coste computacional mínimo.
+## Resumen
 
-## 📊 Resultados de la Prueba de Concepto (PoC)
+La idea central del documento sigue siendo correcta: una busqueda superficial puede corregir errores locales de la red y elevar mucho la fiabilidad practica del sistema sin inflar el tamano del modelo.
 
-Se evaluaron 1000 posiciones aleatorias de los finales KQvK y KRvK comparando la precisión del modelo solo (Raw NN) frente al modelo con búsqueda.
+## Que Demostro La PoC
 
-| Configuración | Profundidad 0 (Raw NN) | Profundidad 1 | **Profundidad 2** |
-| :--- | :---: | :---: | :---: |
-| **KQvK** (v1) | 92.50% | 99.50% | **99.50%** |
-| **KRvK** (v1) | 95.40% | 99.90% | **100.00%** |
+La PoC mostro que una red imperfecta puede comportarse mucho mejor cuando se combina con minimax o alpha-beta de poca profundidad, porque la busqueda fuerza consistencia entre estados vecinos.
 
-### Observaciones Clave:
-1.  **Salto Dramático:** Solo 1 nivel de búsqueda (Depth 1) eleva la precisión por encima del 99.5% incluso con modelos medianamente entrenados.
-2.  **Consistencia Global:** En Depth 2, el sistema alcanza el **100.00% de precisión** en KRvK, sugiriendo que las imprecisiones de la red son locales y no se propagan a través de la búsqueda.
-3.  **Eficiencia de Almacenamiento:** Esta técnica permite usar modelos más pequeños (más comprimidos) manteniendo precisiones de "tabla perfecta" mediante búsqueda.
+Resultado conceptual:
 
-## 💡 Concepto Técnico: Trading Compute for Accuracy
-El compromiso fundamental del proyecto evoluciona:
-*   **Antes:** Mayor precisión requería modelos más grandes -> Menor compresión.
-*   **Ahora:** Modelos ultra-comprimidos + Búsqueda superficial -> Máxima precisión.
+- la red no necesita ser perfecta de forma aislada para que el sistema final se acerque a comportamiento perfecto
+- es razonable intercambiar algo de computo por mucha precision adicional
 
-La búsqueda corrige los errores de la función de evaluación (la NN) mediante la verificación de la consistencia entre estados adyacentes. Si la red evalúa una posición como "Ganada" pero no existe ningún movimiento legal que lleve a otra posición evaluada como "Ganada", la búsqueda Depth 1 corrige automáticamente la evaluación.
+## Como Debe Leerse Hoy
 
-## 🛠️ Implicaciones para el Futuro
-Este hallazgo es fundamental para finales de 5 y 6 piezas, donde la generación exhaustiva y el entrenamiento perfecto son computacionalmente prohibitivos. Podemos aceptar modelos con un 90-95% de precisión "bruta" sabiendo que la búsqueda en tiempo de ejecución los convertirá en herramientas de juego perfecto.
+Este documento es una prueba de concepto temprana, no un benchmark final del proyecto. Los numeros aqui sirven para justificar la direccion de trabajo, no como metricas definitivas del estado actual del repo.
+
+## Lo Que Sigue Vigente
+
+1. La busqueda superficial tiene mucho valor como parche estructural.
+2. Los errores de la red parecen locales en muchos casos interesantes.
+3. La combinacion "modelo comprimido + busqueda" es probablemente mejor estrategia que perseguir solo accuracy bruta.
+
+## Lo Que No Debe Sobreinterpretarse
+
+1. Los resultados sobre 1000 posiciones aleatorias no son una validacion exhaustiva universal.
+2. Las cifras de depth 1 y depth 2 aqui no deben presentarse como el estado actual del pipeline KPvKP.
+3. El documento no sustituye la validacion con logs, metadata y modelos recientes.
+
+## Implicacion Estrategica
+
+Este analisis sigue apuntando a una arquitectura final muy razonable para el proyecto:
+
+1. dataset canonico
+2. modelo pequeno y reproducible
+3. export ONNX o equivalente
+4. correccion por busqueda
+5. exception maps solo para los residuos realmente dificiles
+
+## Estado Dentro Del Repo Actual
+
+La idea de correccion por busqueda sigue alineada con la direccion activa del repositorio. No se ha quedado obsoleta. Lo que si estaba anticuado era leer esta PoC como si ya fuese la medicion final y reciente del sistema completo.
+
+## Script Relacionado
+
+- `src/search_poc.py`
 
 ---
-**Autor:** Mario Carbonell / Antigravity
-**Fecha:** 14 de Marzo, 2026
-**Script de Validación:** `src/search_poc.py`
+
+Estado actual: documento historico valido y todavia estrategicamente importante

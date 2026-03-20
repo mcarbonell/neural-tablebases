@@ -1,277 +1,95 @@
 # Project Status
 
-**Last Updated:** March 18, 2026, 13:18 PM
+Last updated: March 20, 2026
 
-## 🎯 Current Objective
+## Current Objective
 
-Implement and validate Encoding V5 + Search Correction for perfect accuracy in 4-piece endgames.
+Stabilize the V5-style canonical KPvKP pipeline, keep documentation aligned with the codebase, and use that line as the reference path for future 4-piece and 5-piece work.
 
-## 📊 Progress Summary
+## Active State
 
-## 📊 Progress Summary
+### In progress
 
-### Completed ✅
+1. KPvKP canonical training on `data/v5/KPvKP_canonical.npz`
+   - Dataset metadata reports `7,436,088` positions.
+   - Relative encoding metadata is `version = 5`.
+   - Current best checkpoint on March 20, 2026:
+     - `val_acc = 0.9964`
+     - `val_loss = 0.0104`
+     - `val_dtz_mae = 0.0373`
 
-1. **Encoding V5 & Search Correction (Perfection Reach)** (NEW)
-   - **KPvK (3-Piece) reached 100.00% accuracy** (NN + Depth-1 Search) ✅
-   - **Encoding V5**: King-centric architecture (Slot 0 anchor) stabilizes learning ✅
-   - **Search Correction**: Minimax D1 eliminates 100% of remaining local errors ✅
-   - Total dataset reduction: 50% (Canonical) + perfect inference via search ✅
+2. ONNX-based evaluation/search workflow
+   - ONNX exports for KPvK and KPvKP are already present in `data/`.
+   - Search correction remains part of the practical path to perfect behavior on hard cases.
 
-2. **Hardware Acceleration (AMD GPU)**
-   - **DirectML** support for Windows fully operational ✅
-   - **1.1s/epoch** on Radeon 780M for 3-piece models ✅
+### Available now
 
-3. **Canonical Forms & Parallel Generation**
-   - 50% dataset reduction achieved ✅
-   - Parallel generator (`src/generate_datasets_parallel.py`) deployed ✅
-   - Canonical wrapper (`src/generate_datasets_parallel_canonical.py`) kept for backward compatibility ✅
-   - 6-7x faster generation speed ✅
+1. Canonical and non-canonical datasets for the main 3-piece baselines:
+   - KQvK
+   - KRvK
+   - KPvK
 
-4. **WDL 5 Classes Support**
-   - Fully integrated for 5-piece endgames ✅
-   - Auto-detection in analysis tools ✅
+2. Larger datasets already present locally:
+   - KPvKP canonical
+   - KRPvKP canonical
+   - KRRvK full
+   - KRRvK canonical
 
-5. **Hardware Acceleration (AMD GPU)** (NEW)
-   - **DirectML** support for Windows added ✅
-   - **10x speedup** on AMD Radeon 780M (1.1s/epoch vs 12s on CPU) ✅
-   - Dual-environment support (Python 3.12 for GPU training) ✅
+3. Hardware path for AMD GPU training on Windows through DirectML.
 
-### In Progress 🔄
+## What Is Settled
 
-1. **KRPvKP V4 Training** (5-Piece)
-   - Status: Epoch 8+ complete
-   - Accuracy: **94.1%** and climbing
-   - Confidence: ~99.9% on tested win positions
-   - Architecture: MLP 2048-1024-512-256
+1. Geometric/relative encodings outperform one-hot style baselines by a large margin in this project.
+2. Canonical forms are integrated into the primary generator and are no longer an experimental side path.
+3. The parallel generator is the standard dataset creation path for serious runs.
+4. Metadata sidecars for datasets and checkpoints are now an important part of reproducibility.
 
-2. **KPvKP V4 Precision Training** (4-Piece)
-   - Status: Epoch 71+ complete
-   - Accuracy: **97.35%**
-   - Result: Correctly solves complex race positions with search depth 2
+## What Changed Since The Older Docs
 
-### Planned ⏭️
+1. KPvKP is no longer accurately described as just a V4 experiment around 97.4%.
+   - The active line is canonical KPvKP under the `v5` dataset branch.
+   - Current training has moved materially beyond the older V4 numbers.
 
-1. **Massive 5-Piece Expansion**
-   - Generate KRvKP, KBPvK, KNPvK with V4 + Canonical
-   - Standardize search-based error correction for all 5-piece models
+2. KRRvK is no longer just "pending generation".
+   - Both `data/KRRvK.npz` and `data/KRRvK_canonical.npz` exist in the repo workspace.
 
-2. **Canonical Forms for All Endgames**
-   - Apply to existing 3-piece datasets (already done)
-   - Apply to all future 4-piece endgames
-   - Standardize pipeline with canonical forms
+3. The top-level documentation had drifted behind the repo.
+   - `README.md`
+   - `PROJECT_STATUS.md`
+   - `docs/README.md`
+   have now been realigned with the current code and artifacts.
 
-3. **Next 4-Piece Endgames with Canonical Forms**
-   - KRvKP: Asymmetric, pawn complexity (~1.25 hours generation with 50% reduction)
-   - KRvKN: Complex 4-piece endgame
-   - KBPvK: Fortress positions (~1.25 hours generation)
-   - All with 50% dataset reduction via canonical forms
+## Near-Term Priorities
 
-4. **Additional 4-Piece Endgames**
-   - KQvKQ (material equal, complex)
-   - KQvKR (Queen vs rook, material imbalance)
-   - All with canonical forms optimization
+1. Finish the current KPvKP V5 training run and record a stable reference result.
+2. Keep the README/status/docs index synchronized with the latest checkpoints and datasets.
+3. Clarify V4 vs V5 naming in helper scripts where dimensionality-based handling still blurs the distinction.
+4. Decide whether the next comparison target is KRRvK training refresh or broader 4-piece/5-piece evaluation tooling.
 
-## 🔬 Key Findings
+## Known Documentation/Code Friction
 
-### What Works
+1. Some historical reports still discuss older V4 milestones as if they were current.
+2. Some scripts use input dimensionality as a proxy and label `45/68/95` as V4-compatible, while dataset metadata may say V5.
+3. The documentation tree contains both active documents and archival snapshots; they should not be read as equally current.
 
-1. **Geometric encoding is dramatically better than one-hot**
-   - 99.93% vs 68% accuracy
-   - 98% accuracy in epoch 1 vs never reaching 70%
-   - 41 hard examples vs 7,000+
+## Recommended Source Of Truth
 
-2. **Canonical forms work excellently** (NEW)
-   - 50% dataset reduction with same/better accuracy
-   - KQvK: 100.00% (better than original 99.94%)
-   - KRvK: 100.00% (same as original)
-   - KPvK: 99.57% (close to original 99.88%)
-   - DTZ MAE improved in all cases
-4. **Search-based Error Correction** (NEW)
-   - Depth-1 search provides massive accuracy boost (92% -> 99.5%+) ✅
-   - Depth-2 achieves 100% accuracy in tested 3-piece endgames ✅
-   - Successfully validated as a "patch" for NN local inconsistencies ✅
+When docs disagree, prefer this order:
 
-3. **Encoding is more important than model size**
-   - 43 dims beats 192 dims
-   - Smaller, more focused features work better
+1. Dataset metadata in `*_metadata.json`
+2. Checkpoint metadata in `*_metadata.json`
+3. Active training logs in `logs/`
+4. `PROJECT_STATUS.md`
+5. Older result summaries and archived notes
 
-4. **Fast convergence with optimized hyperparameters**
-   - 1-2 epochs to 98%+
-   - 10-30 epochs to 99.9%+
-   - 200 epochs optimal for canonical forms
-
-5. **Universal approach**
-   - Same encoding works for all endgames
-   - Canonical forms work for all endgames
-   - No endgame-specific rules needed
-
-### Challenges
-
-1. **Dataset generation is slow for 4+ pieces**
-   - 3 pieces: 2 minutes
-   - 4 pieces: 15 hours (exhaustive)
-   - Solution: Canonical forms reduce by 50%
-   - Solution: Parallel generation 6-7x faster
-
-2. **Memory usage grows with dataset size**
-   - 3 pieces: ~100 MB
-   - 4 pieces: ~6-8 GB (estimated)
-   - Solution: Canonical forms reduce by 50%
-   - Solution: Save in chunks
-
-3. **Hyperparameter optimization needed for canonical forms**
-   - Baseline: 50 epochs → 98.81% accuracy for KPvK
-   - Optimized: 200 epochs → 99.57% accuracy for KPvK
-   - Solution: Standard config: 200 epochs, batch 512, lr 0.001
-
-## 📈 Metrics
-
-### Accuracy: Original vs Canonical
-
-| Endgame | Original Accuracy | Canonical Accuracy | Δ Accuracy | Dataset Reduction |
-|---------|------------------|-------------------|------------|-------------------|
-| **KQvK** | 99.94% | **100.00%** | **+0.06%** | **50.4%** |
-| **KRvK** | 100.00% | **100.00%** | **0.00%** | **50.7%** |
-| **KPvK** | 99.88% | **99.57%** | **-0.31%** | **50.6%** |
-| **Average** | **99.94%** | **99.86%** | **-0.08%** | **50.6%** |
-
-### DTZ MAE Improvement
-
-| Endgame | Original DTZ MAE | Canonical DTZ MAE | Δ DTZ MAE | Improvement |
-|---------|-----------------|------------------|-----------|-------------|
-| **KQvK** | 0.64 | **0.47** | **-0.17** | **-27%** |
-| **KRvK** | 1.00 | **0.78** | **-0.22** | **-22%** |
-| **KPvK** | 0.06 | **0.05** | **-0.01** | **-17%** |
-| **Average** | **0.57** | **0.43** | **-0.13** | **-23%** |
-
-### Compression with Canonical Forms
-
-| Endgame | Syzygy Size | Neural (Original) | Neural (Canonical) | Total Reduction |
-|---------|------------|------------------|-------------------|-----------------|
-| KQvK | 10.4 MB | 442 KB | **221 KB** (est.) | **48x** (vs Syzygy) |
-| KRvK | 16.2 MB | 442 KB | **221 KB** (est.) | **73x** (vs Syzygy) |
-| KPvK | 8.2 MB | 442 KB | **221 KB** (est.) | **37x** (vs Syzygy) |
-| **Total** | **34.8 MB** | **442 KB** | **~663 KB** | **53x** (vs Syzygy) |
-
-### Model Size & Training Efficiency
-
-- **Parameters:** 452,740 (unchanged)
-- **FP32:** 1.73 MB → **0.87 MB** (est. with pruning)
-- **Training time per epoch:** **50% faster** (half the data)
-- **Convergence:** 200 epochs optimal for canonical forms
-- **Batch size:** 512 optimal (vs 1024 for original)
-
-## 🎯 Next Steps
-
-### Immediate (Today/Tomorrow)
-
-1. ⏳ **Regenerate KRRvK with canonical forms** (PRIORITY)
-   - Use `python src/generate_datasets_parallel.py --config KRRvK --relative --enumeration permutation --canonical --canonical-mode auto`
-   - Expected: 50% dataset reduction
-   - Time: ~3 hours (vs 6 hours original)
-
-2. 🎓 **Train KRRvK canonical model**
-   - Use optimized config: 200 epochs, batch 512
-   - Expected accuracy: >99.9% with 50% less data
-   - Validate 4-piece scaling with canonical forms
-
-3. 📊 **Document canonical forms methodology**
-   - Update paper with canonical forms results
-   - Create comprehensive documentation
-   - Update GitHub README
-
-### Short Term (This Week)
-
-1. 📦 **Generate all 4-piece endgames with canonical forms**
-   - KRvKP, KPvKP, KBPvK with 50% reduction
-   - Use `python src/generate_datasets_parallel.py --config ENDGAME --relative --enumeration permutation --canonical --canonical-mode auto`
-   - Expected generation time: ~1.25 hours each
-
-2. 🎓 **Train all 4-piece canonical models**
-   - Standardized config: 200 epochs, batch 512
-   - Compare accuracy vs original (projected)
-   - Validate scalability
-
-3. 📊 **Complete canonical forms validation**
-   - Finalize hyperparameter recommendations
-   - Create training pipeline with canonical forms
-   - Update all documentation
-
-### Medium Term (This Month)
-
-1. 🔬 **Apply canonical forms to 5+ piece endgames**
-   - Test with sampling for very large endgames
-   - Validate 50% reduction holds
-   - Optimize for memory constraints
-
-2. � **Optimize end-to-end pipeline**
-   - Integrate canonical forms as standard
-   - Automate dataset generation and training
-   - Create validation suite
-
-3. 📝 **Finalize paper for submission**
-   - Include canonical forms methodology
-   - Add 4-piece results with canonical forms
-   - Submit to ICGA Journal
-
-### Long Term (Future)
-
-1. 📄 **Submit to ICGA Journal**
-2. 🌐 **Publish complete package on GitHub**
-3. 💬 **Post comprehensive results on TalkChess**
-4. 🔬 **Explore advanced compression techniques**
-5. 🎯 **Achieve <250 KB target with pruning + canonical forms**
-
-## 🐛 Known Issues
-
-1. **Dataset generation is slow for 4+ pieces**
-   - Status: Partially solved with canonical forms
-   - Solution: Canonical forms reduce by 50%
-   - Solution: Parallel generation 6-7x faster
-   - Priority: Medium
-
-2. **Memory usage for large datasets**
-   - Status: Improved with canonical forms
-   - Solution: 50% reduction with canonical forms
-   - Solution: Save in chunks
-   - Priority: Medium
-
-3. **KPvK canonical accuracy slightly lower**
-   - Status: Optimized from 98.81% to 99.57%
-   - Solution: 200 epochs, batch 512 configuration
-   - Difference: -0.31% vs original (acceptable)
-   - Priority: Low
-
-4. **KRRvK generation incomplete**
-   - Status: 81% complete, on hold
-   - Solution: Regenerate with canonical forms
-   - Expected: 50% faster with parallel generator
-   - Priority: High
-
-## 📝 Notes
-
-- **Canonical forms implementation successful:** 50% dataset reduction with same/better accuracy
-- **KQvK canonical outperforms original:** 100.00% vs 99.94% accuracy
-- **KRvK canonical matches original:** 100.00% accuracy
-- **KPvK canonical close to original:** 99.57% vs 99.88% accuracy
-- **DTZ MAE improved in all cases:** -0.13 average improvement
-- **Optimized hyperparameters:** 200 epochs, batch 512, lr 0.001
-- **Ready for 4-piece validation with canonical forms**
-
-## 🔗 Quick Links
+## Quick Links
 
 - [Main README](README.md)
-- [Documentation Index](docs/README.md)
-- [Paper Draft](docs/paper/PAPER_DRAFT.md)
-- [3-Piece Results](docs/results/RESUMEN_3_PIEZAS.md)
-- [Canonical Forms Results](docs/results/CANONICAL_FORMS_RESULTS.md) (NEW)
-- [Scripts Guide](scripts/README.md)
+- [Documentation index](docs/README.md)
+- [Scripts guide](scripts/README.md)
+- [Canonical forms results](docs/results/CANONICAL_FORMS_RESULTS.md)
+- [Encoding analysis](docs/results/encoding_analysis.md)
 
 ---
 
-**Current Focus:** Regenerate KRRvK with canonical forms and validate 4-piece scaling with 50% dataset reduction.
-
-**Author:** Mario Raúl Carbonell Martínez  
-**Email:** marioraulcarbonell@gmail.com  
-**GitHub:** https://github.com/mcarbonell/neural-tablebases
+Current focus: KPvKP canonical V5 training and harmonized project documentation

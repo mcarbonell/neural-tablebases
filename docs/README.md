@@ -1,141 +1,73 @@
 # Documentation Index
 
-## 📄 Paper & Publications
+This index separates active entry-point documents from historical or archival material.
 
-Located in `paper/`:
+## Recommended Entry Points
 
-- **[PAPER_DRAFT.md](paper/PAPER_DRAFT.md)** - Draft for ICGA Journal submission
-  - Complete methodology, results, and analysis
-  - Ready for review and submission
-  
-- **[GITHUB_README.md](paper/GITHUB_README.md)** - Repository README for GitHub
-  - Quick start guide
-  - Installation instructions
-  - Usage examples
-  
-- **[TALKCHESS_POST.md](paper/TALKCHESS_POST.md)** - Post for TalkChess forum
-  - Community-friendly format
-  - Discussion points
-  - Questions for feedback
+- [../README.md](../README.md) - top-level overview and current quick start
+- [../PROJECT_STATUS.md](../PROJECT_STATUS.md) - live repo snapshot
+- [../scripts/README.md](../scripts/README.md) - scripts and utilities
 
-## 📊 Experimental Results
+## Active Results
 
 Located in `results/`:
 
-- **[RESUMEN_3_PIEZAS.md](results/RESUMEN_3_PIEZAS.md)** - Complete 3-piece summary
-  - KQvK, KRvK, KPvK results
-  - Comparison with one-hot encoding
-  - Lessons learned
-  
-- **[FINAL_RESULTS.md](results/FINAL_RESULTS.md)** - Comprehensive results
-  - All experiments
-  - Detailed metrics
-  - Training curves
-  
-- **[GEOMETRIC_ENCODING_RESULTS.md](results/GEOMETRIC_ENCODING_RESULTS.md)** - Geometric encoding breakthrough
-  - Initial discovery
-  - Comparison with one-hot
-  
-- **[RELATIVE_ENCODING_SUCCESS.md](results/RELATIVE_ENCODING_SUCCESS.md)** - Relative encoding validation
-  - KQvK and KRvK results
-  - Convergence analysis
-  
-- **[KPVK_RESULTS.md](results/KPVK_RESULTS.md)** - KPvK initial results (with bug)
-  
-- **[KPVK_FIXED_RESULTS.md](results/KPVK_FIXED_RESULTS.md)** - KPvK corrected results
-  - Bug fix details
-  - Final accuracy: 99.89%
+- [results/RESUMEN_3_PIEZAS.md](results/RESUMEN_3_PIEZAS.md) - consolidated 3-piece baseline results
+- [results/CANONICAL_FORMS_RESULTS.md](results/CANONICAL_FORMS_RESULTS.md) - canonical forms experiments and methodology
+- [results/encoding_analysis.md](results/encoding_analysis.md) - encoding-focused summary
+- [results/WDL_5_CLASSES_SUMMARY.md](results/WDL_5_CLASSES_SUMMARY.md) - WDL labeling notes and implications
 
-## 🔬 Technical Analysis
+## Active Analysis
 
 Located in `analysis/`:
 
-- **[ANALISIS_KRVKP.md](analysis/ANALISIS_KRVKP.md)** - KRvKP endgame analysis
-  - Asymmetric material
-  - Tactical complexity
-  - Expected results
-  
-- **[ANALISIS_COMPRESION_TOTAL.md](analysis/ANALISIS_COMPRESION_TOTAL.md)** - Total compression analysis
-  - 956 MB → 3.5 MB
-  - Compression strategies
-  - Scalability estimates
-  
-- **[MEJORA_DISTANCIA_MOVIMIENTO.md](analysis/MEJORA_DISTANCIA_MOVIMIENTO.md)** - Move distance improvement
-  - Encoding v2 design
-  - Piece-specific distances
-  - Expected impact
-  
-- **[OPTIMIZACION_GENERADOR.md](analysis/OPTIMIZACION_GENERADOR.md)** - Generator optimization
-  - Parallelization options
-  - Sampling strategies
-  - Performance analysis
-  
-- **[RESPUESTA_DTZ.md](analysis/RESPUESTA_DTZ.md)** - DTZ (Distance-to-Zero) explanation
-  - What is DTZ
-  - Why we don't train it (yet)
-  - Future work
+- [analysis/CORRECCION_ERRORES_POR_BUSQUEDA.md](analysis/CORRECCION_ERRORES_POR_BUSQUEDA.md) - search as error correction
+- [analysis/OPTIMIZACION_GENERADOR.md](analysis/OPTIMIZACION_GENERADOR.md) - generator and performance work
+- [analysis/PARALLEL_IMPLEMENTATION_SUMMARY.md](analysis/PARALLEL_IMPLEMENTATION_SUMMARY.md) - parallel generation summary
+- [analysis/ANALISIS_COMPRESION_TOTAL.md](analysis/ANALISIS_COMPRESION_TOTAL.md) - compression framing and scaling discussion
 
-## 📋 Planning & Design
+## Planning And Vision
 
-Located in `planning/`:
+Located in `planning/` and `vision/`:
 
-- **[EXPECTATIVAS_4_PIEZAS.md](planning/EXPECTATIVAS_4_PIEZAS.md)** - 4-piece expectations
-  - Complexity analysis
-  - Accuracy predictions
-  - Resource requirements
-  
-- **[ANALISIS_PROYECTO_Y_LOGS.md](planning/ANALISIS_PROYECTO_Y_LOGS.md)** - Project analysis
-  - Initial problem identification
-  - Solution approach
-  
-- **[CHANGES_SUMMARY.md](planning/CHANGES_SUMMARY.md)** - Change log
-  - Major modifications
-  - Bug fixes
-  
-- **[RESPUESTAS.md](planning/RESPUESTAS.md)** - Q&A document
-  - Common questions
-  - Design decisions
+- [planning/MEJORAS_PROPUESTAS_2026-03-14.md](planning/MEJORAS_PROPUESTAS_2026-03-14.md) - current improvement ideas after V4/canonical work
+- [planning/EXPECTATIVAS_4_PIEZAS.md](planning/EXPECTATIVAS_4_PIEZAS.md) - 4-piece expectations and candidate endgames
+- [planning/CHANGES_SUMMARY.md](planning/CHANGES_SUMMARY.md) - project change summary
+- [vision/DISTRIBUTED_COMPUTING_VISION.md](vision/DISTRIBUTED_COMPUTING_VISION.md) - long-term distributed-computing vision
+- [vision/LEGADO_Y_VISION.md](vision/LEGADO_Y_VISION.md) - broader project framing
 
-## 📖 Reading Guide
+## Paper And Community Material
 
-### For First-Time Readers
+Located in `paper/`:
 
-1. Start with [../README.md](../README.md) - Project overview
-2. Read [RESUMEN_3_PIEZAS.md](results/RESUMEN_3_PIEZAS.md) - Main results
-3. Check [PAPER_DRAFT.md](paper/PAPER_DRAFT.md) - Complete methodology
+- [paper/PAPER_DRAFT.md](paper/PAPER_DRAFT.md) - draft paper
+- [paper/GITHUB_README.md](paper/GITHUB_README.md) - repository-facing writeup draft
+- [paper/TALKCHESS_POST.md](paper/TALKCHESS_POST.md) - community post draft
 
-### For Researchers
+## Archive
 
-1. [PAPER_DRAFT.md](paper/PAPER_DRAFT.md) - Full paper
-2. [FINAL_RESULTS.md](results/FINAL_RESULTS.md) - All experimental data
-3. [MEJORA_DISTANCIA_MOVIMIENTO.md](analysis/MEJORA_DISTANCIA_MOVIMIENTO.md) - Technical improvements
+Located in `archive/`:
 
-### For Developers
+- `archive/` contains session summaries, superseded plans, and historical snapshots.
+- Read archive documents as context, not as the current project state.
+- If an archived file disagrees with `../PROJECT_STATUS.md`, assume the archived file is stale unless a newer artifact proves otherwise.
 
-1. [GITHUB_README.md](paper/GITHUB_README.md) - Setup and usage
-2. [OPTIMIZACION_GENERADOR.md](analysis/OPTIMIZACION_GENERADOR.md) - Performance optimization
-3. [ANALISIS_COMPRESION_TOTAL.md](analysis/ANALISIS_COMPRESION_TOTAL.md) - Compression strategies
+## Notes On Freshness
 
-### For Community Discussion
+Use this priority when checking what is current:
 
-1. [TALKCHESS_POST.md](paper/TALKCHESS_POST.md) - Forum post
-2. [RESPUESTA_DTZ.md](analysis/RESPUESTA_DTZ.md) - DTZ explanation
-3. [ANALISIS_KRVKP.md](analysis/ANALISIS_KRVKP.md) - Interesting endgame
+1. Metadata files next to datasets and checkpoints
+2. Active training logs in `../logs/`
+3. [../PROJECT_STATUS.md](../PROJECT_STATUS.md)
+4. This index
+5. Historical results and archived notes
 
-## 🗂️ Document Status
+## Known Fixes In This Index
 
-| Document | Status | Last Updated |
-|----------|--------|--------------|
-| PAPER_DRAFT.md | Draft | 2026-03-13 |
-| RESUMEN_3_PIEZAS.md | Complete | 2026-03-13 |
-| FINAL_RESULTS.md | Complete | 2026-03-12 |
-| ANALISIS_KRVKP.md | Complete | 2026-03-13 |
-| MEJORA_DISTANCIA_MOVIMIENTO.md | Complete | 2026-03-13 |
-| OPTIMIZACION_GENERADOR.md | Complete | 2026-03-13 |
+- Removed the stale reference to `planning/ANALISIS_PROYECTO_Y_LOGS.md`, which no longer exists outside the archive.
+- Promoted documents that match the current KPvKP canonical and search-correction direction.
+- Kept legacy papers/posts visible, but not framed as the most current source of truth.
 
 ---
 
-**Navigation:**
-- [← Back to Project Root](../README.md)
-- [→ View Paper Draft](paper/PAPER_DRAFT.md)
-- [→ View Results Summary](results/RESUMEN_3_PIEZAS.md)
+Last updated: March 20, 2026

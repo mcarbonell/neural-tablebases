@@ -1,203 +1,126 @@
 # Scripts Directory
 
-Utility scripts organized by purpose.
+Utility scripts for dataset generation, training, verification, and analysis.
 
-## 📊 Analysis Scripts
+## Current Guidance
+
+- Prefer `src/generate_datasets_parallel.py` for real dataset generation.
+- Prefer dataset/checkpoint metadata and active logs over older markdown summaries.
+- The most active workflow in the repo is currently KPvKP canonical under `data/v5/`.
+
+## Analysis Scripts
 
 Located in `analysis/`:
 
-- **analyze_3piece_endgames.py** - Analyze all 3-piece endgames
-- **analyze_4piece_endgames.py** - Analyze all 4-piece endgames
-- **analyze_kpvk.py** - Specific KPvK analysis
-- **analyze_log.py** - Parse training logs
-- **analyze_models.py** - Model comparison and analysis
-- **analyze_problem.py** - Problem diagnosis
-- **analyze_training_details.py** - Detailed training metrics
-- **check_data.py** - Dataset integrity check
-- **geometric_analysis.py** - Geometric encoding analysis
-- **plot_training.py** - Generate training plots
+- `analyze_3piece_endgames.py` - summarize 3-piece experiments
+- `analyze_4piece_endgames.py` - summarize 4-piece experiments
+- `analyze_kpvk.py` - KPvK-specific analysis
+- `analyze_log.py` - parse training logs
+- `analyze_models.py` - compare or inspect saved models
+- `analyze_problem.py` - diagnose problem cases
+- `analyze_training_details.py` - inspect detailed metrics
+- `check_data.py` - basic dataset integrity checks
+- `geometric_analysis.py` - geometric encoding analysis
+- `plot_training.py` - plot training curves from logs
 
-### Usage Examples
+Examples:
 
 ```bash
-# Analyze 3-piece endgames
-python scripts/analysis/analyze_3piece_endgames.py
-
-# Analyze 4-piece endgames
-python scripts/analysis/analyze_4piece_endgames.py
-
-# Plot training curves
+python scripts/analysis/analyze_log.py logs/train_mlp_20260320_004934.log
 python scripts/analysis/plot_training.py --log logs/train_mlp_*.log
-```
-
-## 🧪 Testing Scripts
-
-Located in `testing/`:
-
-- **test_encoding_v2.py** - Test encoding v2 with move distance
-- **test_relative_encoding.py** - Test relative encoding
-- **test_train.py** - Test training pipeline
-- **debug_kpvk.py** - Debug KPvK dataset
-- **debug_kpvk_detailed.py** - Detailed KPvK debugging
-- **verify_dataset.py** - Verify dataset correctness
-- **verify_kpvk.py** - Verify KPvK dataset
-- **visualize_problem.py** - Visualize problematic positions
-
-### Usage Examples
-
-```bash
-# Test encoding v2
-python scripts/testing/test_encoding_v2.py
-
-# Verify dataset
-python scripts/testing/verify_dataset.py --data data/KQvK.npz
-
-# Debug KPvK
-python scripts/testing/debug_kpvk.py
-```
-
-## 🎓 Training Scripts
-
-Located in `training/`:
-
-- **train_improved.bat** - Windows training script
-- **train_improved.sh** - Linux/Mac training script
-- **test_multiple_endgames.bat** - Batch test multiple endgames
-- **generate_parallel.bat** - Parallel dataset generation (6-7x faster)
-
-### Usage Examples
-
-```bash
-# Windows training
-scripts\training\train_improved.bat
-
-# Linux/Mac training
-bash scripts/training/train_improved.sh
-
-# Test multiple endgames
-scripts\training\test_multiple_endgames.bat
-
-# Parallel dataset generation (NEW!)
-scripts\training\generate_parallel.bat KRRvK 8 10000
-scripts\training\generate_parallel.bat KRvKP
-```
-
-## 📝 Script Categories
-
-### Data Generation & Verification
-
-- `check_data.py` - Check dataset integrity
-- `verify_dataset.py` - Verify dataset correctness
-- `verify_kpvk.py` - Verify KPvK specifically
-
-### Analysis & Visualization
-
-- `analyze_*.py` - Various analysis scripts
-- `plot_training.py` - Generate plots
-- `geometric_analysis.py` - Encoding analysis
-
-### Testing & Debugging
-
-- `test_*.py` - Test various components
-- `debug_*.py` - Debug specific issues
-- `visualize_problem.py` - Visualize problems
-
-### Training & Execution
-
-- `train_improved.*` - Training scripts
-- `test_multiple_endgames.bat` - Batch testing
-
-## 🔧 Common Tasks
-
-### Generate Datasets (Parallel - Recommended)
-
-```bash
-# Quick generation with defaults (uses all CPU cores)
-python src/generate_datasets_parallel.py --config KRRvK --relative
-
-# Or use the batch script
-scripts\training\generate_parallel.bat KRRvK
-
-# Custom settings
-python src/generate_datasets_parallel.py \
-    --config KRvKP \
-    --relative \
-    --workers 6 \
-    --chunk-size 5000
-
-# With encoding v2 (move distance)
-python src/generate_datasets_parallel.py \
-    --config KPvKP \
-    --relative \
-    --move-distance
-```
-
-**Performance:** 6-7x faster than single-threaded (15 hours → 2.5 hours for 4-piece)
-
-### Generate Datasets (Single-threaded)
-
-```bash
-# Basic generation
-python src/generate_datasets.py --config KQvK --relative
-
-# With encoding v2
-python src/generate_datasets.py --config KQvK --relative --move-distance
-```
-
-### Analyze Training Results
-
-```bash
-# Parse training log
-python scripts/analysis/analyze_log.py logs/train_mlp_20260312_234058.log
-
-# Plot training curves
-python scripts/analysis/plot_training.py --log logs/train_mlp_*.log
-
-# Analyze model performance
 python scripts/analysis/analyze_models.py --model data/mlp_best.pth
 ```
 
-### Verify Datasets
+## Testing Scripts
+
+Located in `testing/`:
+
+- `test_encoding_v2.py` - legacy encoding-v2 checks
+- `test_relative_encoding.py` - relative encoding checks
+- `test_train.py` - training pipeline smoke test
+- `debug_kpvk.py` - debug KPvK dataset/model behavior
+- `debug_kpvk_detailed.py` - deeper KPvK debugging
+- `verify_dataset.py` - verify dataset correctness
+- `verify_kpvk.py` - KPvK-specific verification
+- `visualize_problem.py` - inspect problematic positions visually
+
+Examples:
 
 ```bash
-# Check dataset integrity
-python scripts/analysis/check_data.py
-
-# Verify specific dataset
-python scripts/testing/verify_dataset.py --data data/KQvK.npz
-
-# Debug KPvK issues
+python scripts/testing/verify_dataset.py --data data/v5/KPvKP_canonical.npz
 python scripts/testing/debug_kpvk.py
 ```
 
-### Test Encoding
+## Training Scripts
+
+Located in `training/`:
+
+- `train_improved.bat` - Windows training helper
+- `train_improved.sh` - Linux/macOS training helper
+- `test_multiple_endgames.bat` - batch-style experiment helper
+- `generate_parallel.bat` - wrapper for parallel dataset generation
+- `train_sampled.py` - sampled training helper
+
+Examples:
+
+```powershell
+scripts\training\generate_parallel.bat KPvKP
+scripts\training\train_improved.bat
+```
+
+## Common Tasks
+
+### Generate datasets
 
 ```bash
-# Test encoding v2
-python scripts/testing/test_encoding_v2.py
+# Current canonical KPvKP path
+python src/generate_datasets_parallel.py --config KPvKP --relative --version 5 --canonical --canonical-mode auto
 
-# Test relative encoding
-python scripts/testing/test_relative_encoding.py
+# KRRvK canonical
+python src/generate_datasets_parallel.py --config KRRvK --relative --canonical --canonical-mode auto
+
+# Smoke test with deterministic shuffle
+python src/generate_datasets_parallel.py --data data/smoke --config KPvKP --relative --version 5 --canonical --limit-items 5000 --shuffle-seed 42 --workers 1
 ```
 
-## 📋 Script Dependencies
+### Train models
+
+```bash
+# Active KPvKP line
+python src/train.py --data_path data/v5/KPvKP_canonical.npz --model mlp --epochs 1000 --model_name mlp_kpvkp_v5
+
+# Older canonical datasets remain usable
+python src/train.py --data_path data/KRRvK_canonical.npz --model mlp --epochs 200 --model_name mlp_krrvk_canonical
+```
+
+### Export and verify inference
+
+```bash
+python src/export_onnx.py --model_path data/mlp_best.pth --output_path data/kpvkp_v5_eval.onnx
+python src/verify_search_correction.py
+```
+
+## Dependencies
 
 Most scripts require:
-```
+
+```text
 python >= 3.8
 numpy
 torch
 python-chess
-matplotlib (for plotting)
+matplotlib
 ```
 
-Install with:
+Install the basics with:
+
 ```bash
 pip install numpy torch python-chess matplotlib
 ```
 
 ---
 
-**Navigation:**
-- [← Back to Project Root](../README.md)
-- [→ View Documentation](../docs/README.md)
+See also:
+- [../README.md](../README.md)
+- [../PROJECT_STATUS.md](../PROJECT_STATUS.md)
+- [../docs/README.md](../docs/README.md)

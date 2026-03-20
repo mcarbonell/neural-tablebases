@@ -1,247 +1,66 @@
 # Neural Chess Tablebase Compression
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
+> Working draft of a repository-facing overview. This file is retained for paper/community material, but the authoritative live README is `../README.md`.
 
-> Compressing chess endgame tablebases by 273x using neural networks with geometric encoding
+## Project Summary
 
-## 🎯 Key Results
+Neural Tablebases studies neural compression of Syzygy-style chess endgame information through compact encodings, canonical position generation, and search-based correction. The long-term aim is practical compression with reliable play and eventually perfect behavior through hybrid inference.
 
-- **99.93% average accuracy** on 3-piece endgames
-- **273x compression ratio** (956 MB → 3.5 MB)
-- **Fast convergence:** 98%+ accuracy in 1 epoch
-- **Universal approach:** No endgame-specific rules
+## Current Repo Snapshot
 
-## 📊 Results Summary
+- 3-piece work is mature and broadly stable.
+- Canonical dataset generation is integrated into the main parallel generator.
+- The active training line is KPvKP canonical under `data/v5/KPvKP_canonical.npz`.
+- Current checkpoints materially outperform the older V4-only KPvKP milestone often cited in older notes.
+- KRRvK and KRPvKP datasets already exist in the workspace and should not be described as purely hypothetical.
 
-| Endgame | Positions | Accuracy | Compression |
-|---------|-----------|----------|-------------|
-| KQvK | 368,452 | 99.92% | 24x |
-| KRvK | 399,112 | 99.99% | 37x |
-| KPvK | 331,352 | 99.89% | 19x |
-| **Average** | 366,305 | **99.93%** | **27x** |
+## Practical Highlights
 
-## 🚀 Quick Start
+- Strong 3-piece performance with geometric encodings.
+- Large dataset reductions from canonical forms.
+- ONNX export path already used for evaluation/search tooling.
+- DirectML path for AMD GPU training on Windows.
 
-### Installation
+## Minimal Usage
 
-```bash
-# Clone repository
-git clone https://github.com/[username]/neural-tablebases.git
-cd neural-tablebases
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Download Syzygy tablebases (optional, for dataset generation)
-# Place in ./syzygy/ directory
-```
-
-### Generate Dataset
+### Generate dataset
 
 ```bash
-# Generate 3-piece endgame dataset
-python src/generate_datasets.py --config KQvK --relative
-
-# Generate 4-piece endgame dataset
-python src/generate_datasets.py --config KRRvK --relative
+python src/generate_datasets_parallel.py --config KPvKP --relative --version 5 --canonical --canonical-mode auto
 ```
 
-### Train Model
+### Train
 
 ```bash
-# Train on KQvK
-python src/train.py --data_path data/KQvK.npz --model mlp --epochs 30
-
-# Train on KRvK
-python src/train.py --data_path data/KRvK.npz --model mlp --epochs 30
+python src/train.py --data_path data/v5/KPvKP_canonical.npz --model mlp --epochs 1000 --model_name mlp_kpvkp_v5
 ```
 
-### Evaluate Model
+### Export ONNX
 
 ```bash
-# Analyze training results
-python analyze_models.py --model data/mlp_best.pth --data data/KQvK.npz
+python src/export_onnx.py --model_path data/mlp_best.pth --output_path data/kpvkp_v5_eval.onnx
 ```
 
-## 🧠 How It Works
+## Encoding Evolution
 
-### Geometric Encoding
+- `v1`: original geometric baseline
+- `v2` / `v2 fixed`: move-distance and relationship feature experiments
+- `v4`: pawn-race focused relative encoding used in earlier KPvKP/KRPvKP runs
+- `v5`: current active canonical KPvKP branch
 
-Unlike traditional one-hot encoding (192 dims), we use geometric encoding (43 dims) that captures spatial relationships:
+## Recommended Reading Order
 
-```python
-# Per piece (10 dims × 3 pieces = 30 dims)
-- Normalized coordinates (x, y): 2 dims
-- Piece type [K,Q,R,B,N,P]: 6 dims
-- Color [White, Black]: 2 dims
+1. `../README.md`
+2. `../PROJECT_STATUS.md`
+3. `../docs/results/CANONICAL_FORMS_RESULTS.md`
+4. `../docs/results/encoding_analysis.md`
+5. `../docs/analysis/CORRECCION_ERRORES_POR_BUSQUEDA.md`
 
-# Per pair (4 dims × 3 pairs = 12 dims)
-- Manhattan distance: 1 dim
-- Chebyshev distance: 1 dim
-- Direction vector (dx, dy): 2 dims
+## Notes
 
-# Global (1 dim)
-- Side to move: 1 dim
-
-Total: 43 dims
-```
-
-### Model Architecture
-
-```python
-MLP(
-    Input: 43 dims
-    Hidden: [512, 512, 256, 128]
-    Output: 3 classes (Loss, Draw, Win)
-    Parameters: 452,740
-    Size: 442 KB (INT8)
-)
-```
-
-## 📈 Comparison: One-Hot vs Geometric
-
-| Metric | One-Hot | Geometric | Improvement |
-|--------|---------|-----------|-------------|
-| Input dims | 192 | 43 | **-78%** |
-| Epoch 1 accuracy | 46% | 98% | **+52%** |
-| Best accuracy | 68% | 99.92% | **+32%** |
-| Epochs to 99% | Never | 2 | **∞** |
-| Hard examples | 7,000+ | 41 | **-99%** |
-
-## 📁 Project Structure
-
-```
-neural-tablebases/
-├── src/
-│   ├── generate_datasets.py  # Dataset generation from Syzygy
-│   ├── models.py              # Neural network architectures
-│   └── train.py               # Training script
-├── data/
-│   ├── KQvK.npz              # Generated datasets
-│   ├── KRvK.npz
-│   └── *.pth                 # Trained models
-├── syzygy/                   # Syzygy tablebases (not included)
-├── logs/                     # Training logs
-├── docs/                     # Documentation
-└── README.md
-```
-
-## 🔬 Experiments
-
-### 3-Piece Endgames (Completed)
-
-- [x] KQvK: 99.92% accuracy
-- [x] KRvK: 99.99% accuracy
-- [x] KPvK: 99.89% accuracy
-
-### 4-Piece Endgames (In Progress)
-
-- [ ] KRRvK: Testing
-- [ ] KRvKP: Planned
-- [ ] KQvKQ: Planned
-
-## 📊 Training Curves
-
-### KQvK Convergence
-
-```
-Epoch 1:  98.07% accuracy
-Epoch 2:  99.59% accuracy
-Epoch 10: 99.77% accuracy
-Epoch 27: 99.92% accuracy (best)
-```
-
-### Hard Examples Reduction
-
-```
-Epoch 1:  1,825 hard examples
-Epoch 10: 85 hard examples
-Epoch 27: 41 hard examples (-99%)
-```
-
-## 💾 Model Sizes
-
-| Format | Size | Compression vs Syzygy |
-|--------|------|----------------------|
-| FP32 | 1.73 MB | 6x |
-| FP16 | 884 KB | 12x |
-| INT8 | 442 KB | 24x |
-
-## 🎓 Research Paper
-
-**Title:** Neural Tablebase Compression using Geometric Encoding
-
-**Authors:** [To be added]
-
-**Abstract:** We present a novel approach to chess endgame tablebase compression using neural networks with geometric encoding, achieving 99.93% accuracy with 273x compression ratio.
-
-**Status:** Draft for ICGA Journal submission
-
-[Link to paper draft](PAPER_DRAFT.md)
-
-## 🛠️ Requirements
-
-```
-python >= 3.8
-torch >= 2.0
-numpy >= 1.20
-python-chess >= 1.9
-```
-
-## 📝 Citation
-
-If you use this work, please cite:
-
-```bibtex
-@article{neural_tablebase_2026,
-  title={Neural Tablebase Compression using Geometric Encoding},
-  author={Carbonell, Mario R.},
-  journal={ICGA Journal},
-  year={2026},
-  note={In preparation}
-}
-```
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📜 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Syzygy tablebase authors for providing ground truth data
-- PyTorch team for the deep learning framework
-- Chess programming community (TalkChess forum)
-
-## 📧 Contact
-
-**Mario Raúl Carbonell Martínez**
-- **GitHub:** [@mcarbonell](https://github.com/mcarbonell)
-- **Email:** marioraulcarbonell@gmail.com
-- **Repository:** [neural-tablebases](https://github.com/mcarbonell/neural-tablebases)
-
-For bugs and feature requests, please use [GitHub Issues](https://github.com/mcarbonell/neural-tablebases/issues).
-
-For discussions, visit the [TalkChess Forum](http://talkchess.com/).
-
-## 🔗 Links
-
-- [ICGA Journal](https://icga.org/)
-- [TalkChess Forum](http://talkchess.com/)
-- [Syzygy Tablebases](https://syzygy-tables.info/)
-- [Python Chess](https://python-chess.readthedocs.io/)
+- This document is intentionally shorter and less “marketing-like” than older drafts.
+- If this file disagrees with the root README or project status, prefer those newer documents.
 
 ---
 
-**Status:** 🚧 Work in Progress
-
-**Last Updated:** March 2026
-
-**Author:** Mario Carbonell
-
-**Star this repo if you find it useful!** ⭐
+Last updated: March 20, 2026

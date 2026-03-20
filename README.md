@@ -3,263 +3,153 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
-[![Compression](https://img.shields.io/badge/compression-79.7x-green.svg)](https://github.com/mcarbonell/neural-tablebases)
-[![Accuracy](https://img.shields.io/badge/accuracy-99.93%25-brightgreen.svg)](https://github.com/mcarbonell/neural-tablebases)
 
-> Compressing chess endgame tablebases by 80x using neural networks with geometric encoding
+> Compressing chess endgame tablebases with neural networks, geometric encodings, canonical forms, and search-based correction.
 
-**Neural Tablebases** es un sistema para comprimir tablas de finales de ajedrez (Syzygy) usando redes neuronales. El objetivo es lograr compresión con 100% de precisión.
+Neural Tablebases explores whether Syzygy-style endgame information can be represented much more compactly with neural models while preserving practical accuracy and eventually reaching perfect play through correction mechanisms.
 
-## 🎯 Quick Results
+## Current Snapshot
 
-- **99.93% average accuracy** on 3-piece endgames
-- **97.4% accuracy** on 4-piece endgames (KPvKP) with **V4 Encoding**
-- **V4 Encoding**: Perspective normalization + Pawn promotion progress features
-- **79.7x compression ratio** (956 MB → 12 MB with exception maps)
-- **Parallel Generation**: 6-7x faster dataset creation with canonical forms
-- **Search-based correction**: 100% accuracy in 3-piece endgames with 2-ply search
+- 3-piece endgames are mature and well documented.
+- Canonical generation is integrated into the main dataset pipeline.
+- The active 4-piece line is KPvKP with canonical data and relative encoding `v5`.
+- The current training run on March 20, 2026 reached `val_acc = 0.9964` on KPvKP canonical data.
+- KRRvK datasets already exist in both full and canonical form; it is no longer just a planned generation target.
 
-## 📊 Current Status
+## Current Results
 
-### Completed Experiments
+| Endgame | Dataset | Encoding | Status | Notes |
+|---------|---------|----------|--------|-------|
+| KQvK | complete | geometric v1 / canonical variants | stable | 3-piece baseline |
+| KRvK | complete | geometric v1 / canonical variants | stable | 3-piece baseline |
+| KPvK | complete | v1 to v5 experiments | stable | search correction validated |
+| KPvKP | complete canonical dataset | relative `v5` | active training | 7,436,088 canonical positions |
+| KRPvKP | complete canonical dataset | relative v4 | exploratory | older 5-piece run kept for reference |
+| KRRvK | full + canonical datasets present | relative variants | available | ready for training/comparison |
 
-| Endgame | Positions | Accuracy | Encoding | Status |
-|---------|-----------|----------|----------|--------|
-| KQvK | 368,452 | 99.92% | v1 | ✅ |
-| KRvK | 399,112 | 99.99% | v1 | ✅ |
-| KPvK | 331,352 | 99.89% | v1 | ✅ |
-| KPvKP | ~6.2M | 97.4% | **v4** | ✅ |
-| KRPvKP | ~6.2M | 94.1% | **v4** | 🔄 Training |
+The repo still contains historical V1-V4 artifacts and reports. The current direction is V5-style relative encoding plus canonical datasets and search-based correction.
 
-### Breakthroughs
+## Quick Start
 
-- **V4 Encoding**: Solved "race positions" by providing explicit pawn progress features.
-- **Minimax Search**: Shallow 2-ply search acts as a perfect patch for neural evaluation errors.
-
-## 🚀 Quick Start
-
-### Generate Dataset
+### Generate a dataset
 
 ```bash
-# Exhaustive, parallel (recommended)
+# Exhaustive parallel generation
 python src/generate_datasets_parallel.py --config KQvK --relative --enumeration permutation
 
-# V4 encoding (KPvKP). `--turns auto` defaults to white_only because V4 normalizes STM
-python src/generate_datasets_parallel.py --config KPvKP --relative --version 4 --enumeration permutation
+# KPvKP with current canonical pipeline
+python src/generate_datasets_parallel.py --config KPvKP --relative --version 5 --canonical --canonical-mode auto
 
-# Canonical forms (pawn-safe auto mode)
-python src/generate_datasets_parallel.py --config KPvKP --relative --version 4 --canonical --canonical-mode auto
-
-# Fast smoke-test (non-exhaustive)
-python src/generate_datasets_parallel.py --data data/smoke --config KQvK --relative --enumeration combination --limit-items 5000
-
-# Fast smoke-test for pawn endgames: avoid biased prefixes with deterministic shuffling
-python src/generate_datasets_parallel.py --data data/smoke --config KPvKP --relative --version 4 --enumeration permutation --limit-items 5000 --shuffle-seed 42 --workers 1
+# Smoke test
+python src/generate_datasets_parallel.py --data data/smoke --config KPvKP --relative --version 5 --canonical --limit-items 5000 --shuffle-seed 42 --workers 1
 ```
 
-The generator always writes a `*_metadata.json` next to the `.npz`. When `--limit-items` and/or `--item-offset` are used, the output file name includes a `_partial_...` suffix to avoid overwriting full datasets.
+Each generated dataset writes a sibling `*_metadata.json` file for reproducibility.
 
-### Train Model
+### Train a model
 
 ```bash
-python src/train.py --data_path data/KPvKP_canonical.npz --model mlp --epochs 30 --model_name mlp_kpvkp_v4_canonical
+python src/train.py --data_path data/v5/KPvKP_canonical.npz --model mlp --epochs 1000 --model_name mlp_kpvkp_v5
 ```
 
-### GPU Acceleration (AMD/Windows)
-
-The project supports GPU acceleration on Windows via **DirectML**, especially optimized for AMD Radeon GPUs (like the 780M).
-
-1. Install the GPU environment:
-   ```powershell
-   winget install --id Python.Python.3.12
-   py -3.12 -m venv venv_gpu
-   .\venv_gpu\Scripts\activate
-   pip install torch torchvision numpy torch-directml
-   ```
-2. Training with GPU:
-   ```bash
-   # Running via train_canonical.py (auto-detects venv_gpu)
-   python train_canonical.py
-   
-   # Or manually
-   .\venv_gpu\Scripts\python.exe src/train.py --data_path data/KQvK_canonical.npz
-   ```
-
-### Analyze Results
+### Export ONNX for evaluation or search
 
 ```bash
-python scripts/analysis/analyze_models.py --model data/mlp_best.pth
+python src/export_onnx.py --model_path data/mlp_best.pth --output_path data/kpvkp_v5_eval.onnx
 ```
 
-## 📁 Project Structure
+## GPU Acceleration
 
+Windows + AMD GPUs are supported through DirectML. A separate Python 3.12 environment is already used in this repo for GPU work:
+
+```powershell
+py -3.12 -m venv venv_gpu
+.\venv_gpu\Scripts\activate
+pip install torch torchvision numpy torch-directml
 ```
+
+Then train with either:
+
+```powershell
+python train_canonical.py
+```
+
+or:
+
+```powershell
+.\venv_gpu\Scripts\python.exe src/train.py --data_path data/v5/KPvKP_canonical.npz
+```
+
+## Project Structure
+
+```text
 neural-tablebases/
-├── README.md                    # This file
-├── src/                         # Core source code
-│   ├── generate_datasets.py     # Dataset generation
-│   ├── generate_datasets_parallel.py  # Parallel version (experimental)
-│   ├── models.py                # Neural network architectures
-│   └── train.py                 # Training script
-├── data/                        # Generated datasets and models
-│   ├── *.npz                    # Datasets
-│   └── *.pth                    # Trained models
-├── logs/                        # Training logs
-├── syzygy/                      # Syzygy tablebases (not included)
-├── docs/                        # Documentation
-│   ├── paper/                   # Paper drafts and publications
-│   │   ├── PAPER_DRAFT.md       # ICGA Journal draft
-│   │   ├── GITHUB_README.md     # GitHub repository README
-│   │   └── TALKCHESS_POST.md    # TalkChess forum post
-│   ├── results/                 # Experimental results
-│   │   ├── RESUMEN_3_PIEZAS.md  # 3-piece summary
-│   │   ├── FINAL_RESULTS.md     # Complete results
-│   │   └── *.md                 # Individual experiment results
-│   ├── analysis/                # Technical analysis
-│   │   ├── ANALISIS_KRVKP.md    # KRvKP analysis
-│   │   ├── MEJORA_DISTANCIA_MOVIMIENTO.md  # Move distance improvement
-│   │   └── *.md                 # Other analyses
-│   └── planning/                # Project planning
-│       └── *.md                 # Plans and design docs
-└── scripts/                     # Utility scripts
-    ├── analysis/                # Analysis scripts
-    ├── testing/                 # Test scripts
-    └── training/                # Training scripts
+|-- README.md
+|-- PROJECT_STATUS.md
+|-- src/
+|   |-- generate_datasets.py
+|   |-- generate_datasets_parallel.py
+|   |-- models.py
+|   |-- train.py
+|   `-- export_onnx.py
+|-- data/
+|   |-- *.npz
+|   |-- *.pth
+|   `-- v5/
+|-- logs/
+|-- docs/
+|   |-- README.md
+|   |-- results/
+|   |-- analysis/
+|   |-- planning/
+|   |-- vision/
+|   `-- paper/
+`-- scripts/
 ```
 
-## 🧠 How It Works
+## Encoding Notes
 
-### Geometric Encoding (v1)
+- `v1`: early geometric baseline for 3-piece work.
+- `v2` / `v2 fixed`: move-distance and relationship feature experiments.
+- `v4`: pawn-race oriented encoding used heavily in early KPvKP and KRPvKP work.
+- `v5`: current relative encoding branch used by the active canonical KPvKP dataset.
 
-For 3 pieces: **43 dimensions**
+Some helper scripts still group dimensions `45/68/95` under shared V4/V5 handling because they reuse the same input sizes. The metadata file next to each dataset is the authoritative source for the dataset version.
 
-```
-Per piece (10 dims × 3 = 30):
-  - Normalized coordinates (x, y): 2 dims
-  - Piece type [K,Q,R,B,N,P]: 6 dims
-  - Color [White, Black]: 2 dims
+## Documentation
 
-Per pair (4 dims × 3 = 12):
-  - Manhattan distance: 1 dim
-  - Chebyshev distance: 1 dim
-  - Direction (dx, dy): 2 dims
+### Start here
 
-Global (1 dim):
-  - Side to move: 1 dim
-```
+- [Project status](docs/README.md)
+- [Live project snapshot](PROJECT_STATUS.md)
+- [Scripts guide](scripts/README.md)
 
-### Geometric Encoding v2.1 (with move distance + pair features)
+### Results and analysis
 
-For 3 pieces: **64 dimensions** (adds move-distance + relationship features)
+- [3-piece summary](docs/results/RESUMEN_3_PIEZAS.md)
+- [Canonical forms results](docs/results/CANONICAL_FORMS_RESULTS.md)
+- [Encoding analysis](docs/results/encoding_analysis.md)
+- [Search correction analysis](docs/analysis/CORRECCION_ERRORES_POR_BUSQUEDA.md)
 
-```
-Per pair (11 dims × 3 = 33):
-  - Manhattan distance: 1 dim
-  - Chebyshev distance: 1 dim
-  - Direction (dx, dy): 2 dims
-  - Weighted move distance (piece-specific): 1 dim  ← NEW
-  - Relationship features (ally/enemy/king-king/etc): 6 dims  ← NEW
-```
+### Research and writing
 
-**Move distance** captures how many moves a piece needs to reach another square:
-- Rook: 1-2 moves
-- Bishop: 1 move (diagonal), ∞ (different color)
-- Knight: Unique distances
-- Pawn: Forward only
+- [Paper draft](docs/paper/PAPER_DRAFT.md)
+- [TalkChess post draft](docs/paper/TALKCHESS_POST.md)
 
-## 📈 Key Results
+## Requirements
 
-### Comparison: One-Hot vs Geometric
-
-| Metric | One-Hot | Geometric | Improvement |
-|--------|---------|-----------|-------------|
-| Input dims | 192 | 43 | -78% |
-| Epoch 1 accuracy | 46% | 98% | +52% |
-| Best accuracy | 68% | 99.92% | +32% |
-| Epochs to 99% | Never | 2 | ∞ |
-| Hard examples | 7,000+ | 41 | -99% |
-
-### Model Size
-
-| Format | Size | Compression vs Syzygy |
-|--------|------|----------------------|
-| FP32 | 1.73 MB | 6x |
-| FP16 | 884 KB | 12x |
-| INT8 | 442 KB | 24x |
-
-## 📚 Documentation
-
-### For Researchers
-
-- **[Paper Draft](docs/paper/PAPER_DRAFT.md)** - ICGA Journal submission
-- **[Complete Results](docs/results/FINAL_RESULTS.md)** - All experimental results
-- **[3-Piece Summary](docs/results/RESUMEN_3_PIEZAS.md)** - Detailed 3-piece analysis
-
-### For Developers
-
-- **[GitHub README](docs/paper/GITHUB_README.md)** - Repository documentation
-- **[Move Distance Analysis](docs/analysis/MEJORA_DISTANCIA_MOVIMIENTO.md)** - Encoding v2 details
-- **[Optimization Guide](docs/analysis/OPTIMIZACION_GENERADOR.md)** - Performance optimization
-
-### For Community
-
-- **[TalkChess Post](docs/paper/TALKCHESS_POST.md)** - Forum discussion draft
-- **[DTZ Analysis](docs/analysis/RESPUESTA_DTZ.md)** - Distance-to-zero explanation
-
-## 🔬 Experiments
-
-### Completed (3-piece)
-
-- ✅ KQvK: 99.92% accuracy
-- ✅ KRvK: 99.99% accuracy
-- ✅ KPvK: 99.89% accuracy
-
-### In Progress (4-piece)
-
-- 🔄 KRRvK: Dataset generating (54%)
-- ⏭️ KRvKP: Planned (asymmetric, tactical)
-- ⏭️ KQvKQ: Planned (material equal, complex)
-
-## 🛠️ Requirements
-
-```
+```text
 python >= 3.8
 torch >= 2.0
 numpy >= 1.20
 python-chess >= 1.9
 ```
 
-## 📝 Citation
+## License
 
-```bibtex
-@article{neural_tablebase_2026,
-  title={Neural Tablebase Compression using Geometric Encoding},
-  author={Carbonell, Mario R.},
-  journal={ICGA Journal},
-  year={2026},
-  note={In preparation}
-}
-```
-
-## 👤 Author
-
-**Mario Raúl Carbonell Martínez**
-- Email: marioraulcarbonell@gmail.com
-- GitHub: [github.com/mcarbonell/neural-tablebases](https://github.com/mcarbonell/neural-tablebases)
-
-## 📧 Contact
-
-- **Issues:** [GitHub Issues](https://github.com/mcarbonell/neural-tablebases/issues)
-- **Discussion:** TalkChess Forum
-- **Email:** marioraulcarbonell@gmail.com
-
-## 📜 License
-
-MIT License - See LICENSE file for details
+MIT License. See [LICENSE](LICENSE).
 
 ---
 
-**Last Updated:** March 18, 2026  
-**Status:** Active Development (GPU Accelerated)  
-**Current Focus:** 4-piece endgames validation  
-**Author:** Mario Carbonell
+Last updated: March 20, 2026
+Current focus: KPvKP canonical V5 training, evaluation export, and documentation cleanup
