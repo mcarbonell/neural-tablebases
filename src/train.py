@@ -234,6 +234,26 @@ def train(args):
     model = get_model_for_endgame(args.model, dataset.num_pieces, num_wdl_classes=num_wdl_classes, 
                                    use_relative_encoding=dataset.use_relative_encoding,
                                    input_size=dataset.input_size).to(device)
+    
+    # Load weights if provided (Transfer Learning)
+    if args.load_path and os.path.exists(args.load_path):
+        log(f"Loading weights from {args.load_path} for Transfer Learning...")
+        try:
+            state_dict = torch.load(args.load_path, map_location=device)
+            # Filter matches only to avoid strict size errors if architecture slightly differs
+            model.load_state_dict(state_dict, strict=True)
+            log("Weights loaded successfully.")
+            
+            # Metadata check
+            meta_path = args.load_path.replace(".pth", "_metadata.json")
+            if os.path.exists(meta_path):
+                with open(meta_path, "r") as f:
+                    meta = json.load(f)
+                    log(f"Model Source: {meta.get('data_path')} (Epoch {meta.get('epoch')}, Acc {meta.get('best_val_acc')})")
+        except Exception as e:
+            log(f"WARNING: could not load weights from {args.load_path}: {e}")
+            log("Starting from scratch.")
+    
     log(f"Model architecture: {model}")
     log(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
@@ -498,5 +518,7 @@ if __name__ == "__main__":
                         help="Number of epochs to train on hard examples (reduced from 5)")
     parser.add_argument("--model_name", type=str, default=None,
                         help="Custom name for the model file (defaults to model type)")
+    parser.add_argument("--load_path", type=str, default=None,
+                        help="Load weights from this checkpoint for transfer learning")
     args = parser.parse_args()
     train(args)
