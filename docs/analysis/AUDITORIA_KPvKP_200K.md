@@ -37,6 +37,17 @@ En carreras de peones simétricas donde ambos coronan, el bando que corona prime
 
 ---
 
+## 🚀 Innovación Propuesta: Curriculum Learning por Transformación Material
+Para solucionar el "Horizonte de Transformación" sin depender de búsquedas ultra-profundas, proponemos una estrategia de entrenamiento inverso o "de adelante hacia atrás":
+
+1.  **Etapa 1 (Táctica):** Entrenar el modelo en finales de Damas de 4 piezas (`KQvKQ`). La red aprende a evaluar mates y capturas rápidas de piezas mayores.
+2.  **Etapa 2 (Ventaja):** Transferir esos pesos neuronales para entrenar finales mixtos (`KQvKP`). La red ya sabe qué hacer con la Dama si logra capturar el peón o si el rival corona.
+3.  **Etapa 3 (Carrera):** Entrenar el final puro de peones (`KPvKP`) usando el modelo pre-entrenado. 
+
+**Resultado esperado:** La red de peones ya no tendrá que "adivinar" el futuro tras la coronación; tendrá el conocimiento grabado en sus pesos neuronales de las etapas anteriores. Entiende el "final de la película" antes de ver el inicio.
+
+---
+
 ## 🛠️ Próximos Pasos Técnicos para el Proyecto
 Para alcanzar el 100.00% (cero errores) en las 4 piezas, la estrategia será:
 
