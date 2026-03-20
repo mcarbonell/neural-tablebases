@@ -414,23 +414,51 @@ def train(args):
             log(f"Overfitting Loop: Re-training on {len(hard_examples)} hard examples...")
             model.train()
             
-            # Create DataLoader from hard examples
-            hard_x = torch.stack([ex['x'] for ex in hard_examples]).to(device)
-            hard_wdl = torch.stack([ex['wdl'] for ex in hard_examples]).to(device)
-            hard_dtz = torch.stack([ex['dtz'] for ex in hard_examples]).to(device)
-            
-            # Train on hard examples with same learning rate (not 2x)
-            hard_optimizer = optim.Adam(model.parameters(), lr=args.lr)
-            for _ in range(args.hard_mining_epochs):
-                hard_optimizer.zero_grad()
-                wdl_logits, dtz_pred = model(hard_x)
-                loss = criterion_wdl(wdl_logits, hard_wdl).mean() + 0.5 * criterion_dtz(dtz_pred.squeeze(), hard_dtz.float())
-                loss.backward()
-                hard_optimizer.step()
-            
-            # Clear hard examples list
-            hard_examples = []
-            log(f"Overfitting Loop completed")
+            # Use same batch size as main training for the hard examples
+            # This avoids huge memory spikes on GPUs like Radeon 780M
+            try:
+                # 1. Stack tensors (still on CPU to preserve VRAM until needed)
+                hard_x_all = torch.stack([ex['x'] for ex in hard_examples])
+                hard_wdl_all = torch.stack([ex['wdl'] for ex in hard_examples])
+                hard_dtz_all = torch.stack([ex['dtz'] for ex in hard_examples])
+                
+                # 2. Create a temporary DataLoader for hard examples
+                from torch.utils.data import TensorDataset
+                hard_dataset = TensorDataset(hard_x_all, hard_wdl_all, hard_dtz_all)
+                hard_loader = DataLoader(hard_dataset, batch_size=args.batch_size, shuffle=True)
+                
+                # 3. Train on hard examples
+                for hard_epoch in range(args.hard_mining_epochs):
+                    hard_epoch_loss = 0
+                    for hx, hwdl, hdtz in hard_loader:
+                        hx, hwdl = hx.to(device), hwdl.to(device)
+                        hdtz = hdtz.to(device)
+                        
+                        optimizer.zero_grad()
+                        hwdl_logits, hdtz_pred = model(hx)
+                        
+                        loss = criterion_wdl(hwdl_logits, hwdl).mean() + 0.5 * criterion_dtz(hdtz_pred.squeeze(), hdtz.float())
+                        loss.backward()
+                        
+                        # Apply same clipping as standard training
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                        optimizer.step()
+                        hard_epoch_loss += loss.item()
+                    
+                    # log(f"  Hard Epoch {hard_epoch+1}/{args.hard_mining_epochs} - Avg Loss: {hard_epoch_loss/len(hard_loader):.4f}")
+                
+            except Exception as e:
+                log(f"ERROR during Overfitting Loop: {e}")
+            finally:
+                # 4. Clear memory immediately
+                hard_examples = []
+                # If using DirectML or shared memory, try to hint at GC
+                if 'hx' in locals(): del hx
+                if 'hwdl' in locals(): del hwdl
+                if 'hdtz' in locals(): del hdtz
+                import gc
+                gc.collect()
+                log(f"Overfitting Loop completed and memory cleared")
 
     # Save Final Model
     model_base = args.model_name if args.model_name else args.model
