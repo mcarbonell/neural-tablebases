@@ -60,3 +60,26 @@ Si decides usar Google o Amazon, la clave es el uso de **Spot Instances** (insta
 ---
 **Fecha de análisis:** 16 de marzo de 2026  
 **Nota:** Precios sujetos a variaciones de mercado y disponibilidad de subastas (spot instances).
+
+---
+
+## 5. Análisis de Opciones Gratuitas (Marzo 2026)
+Para la fase de experimentación o para proyectos con presupuesto limitado, existen excelentes opciones para acceder a cómputo de GPU sin coste.
+
+### A. Entornos de Notebooks (Completamente Gratuitos)
+Son ideales para empezar, hacer prototipos y para entrenamientos de tamaño pequeño o mediano. No requieren tarjeta de crédito.
+
+*   **Google Colab:** La opción más popular. Ofrece acceso gratuito a GPUs como las NVIDIA T4. Es una excelente manera de obtener una cantidad considerable de cómputo por semana sin coste alguno.
+*   **Kaggle Notebooks:** Similar a Colab, Kaggle proporciona un entorno con GPUs gratuitas (generalmente NVIDIA P100 o T4) y una cuota semanal de aproximadamente 30 horas.
+*   **Amazon SageMaker Studio Lab:** La alternativa de AWS a Colab. Ofrece cómputo y 15GB de almacenamiento persistente de forma gratuita, y no requiere una cuenta de AWS o tarjeta de crédito para empezar.
+
+### B. Créditos Gratuitos en Plataformas Cloud
+Estos proveedores ofrecen una cantidad de dinero en créditos para usar en sus servicios (incluyendo GPUs potentes) durante un tiempo limitado. Son perfectos para pruebas más intensivas.
+
+*   **Google Cloud Platform (GCP):** Ofrece **$300 en créditos gratuitos** para cuentas nuevas, válidos por 90 días. Esto puede financiar entre 30 y 100 horas de uso en GPUs potentes.
+*   **Microsoft Azure:** Proporciona **$200 en créditos gratuitos** para nuevos usuarios, válidos por 30 días.
+*   **Amazon Web Services (AWS):** A través de programas como **AWS Activate** (para startups) o **AWS Educate** (para estudiantes) se pueden conseguir importantes cantidades de créditos.
+
+### C. Recomendación para este Proyecto
+1.  **Empezar con Google Colab:** Es la forma más rápida y sencilla de realizar experimentos y validaciones sin ningún compromiso.
+2.  **Para pruebas intensivas, usar GCP:** Activar la prueba gratuita de **Google Cloud (GCP)** para aprovechar los $300 de crédito. Es la oferta de bienvenida más generosa y permitirá validar el rendimiento en hardware más avanzado antes de comprometerse a un proveedor de pago.
