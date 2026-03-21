@@ -339,8 +339,9 @@ def generate_dataset_parallel(syzygy_path: str, output_dir: str, config: str,
         raise ValueError(f"Syzygy path {syzygy_path} not found.")
     
     # Determine pieces
-    if 'v' in config:
-        white_side, black_side = config.split('v')
+    if 'v' in config.lower():
+        # Handle both 'v' and 'V'
+        white_side, black_side = config.replace('V', 'v').split('v')
     else:
         white_side = config[:-1]
         black_side = config[-1]
