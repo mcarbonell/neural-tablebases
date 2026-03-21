@@ -1,4 +1,4 @@
-# Diagnostic script to check failing FENs at various depths
+# Diagnostic script for KQvKP failing FENs
 import chess
 import chess.syzygy
 import onnxruntime as ort
@@ -7,7 +7,7 @@ import os
 from generate_datasets import encode_board, get_material_config
 
 class NeuralMinimax:
-    def __init__(self, onnx_path, syzygy_path, version=5, target_config="KPvKP"):
+    def __init__(self, onnx_path, syzygy_path, version=5, target_config="KQvKP"):
         self.sess = ort.InferenceSession(onnx_path, providers=['CPUExecutionProvider'])
         self.input_name = self.sess.get_inputs()[0].name
         self.tablebase = chess.syzygy.open_tablebase(syzygy_path)
@@ -34,11 +34,8 @@ class NeuralMinimax:
         encoding = encode_board(board, relative=self.rel_arg)
         inp = encoding.reshape(1, -1).astype(np.float32)
         logits = self.sess.run(None, {self.input_name: inp})[0][0]
-        # Softmax to get probs for [Loss, Draw, Win]
         probs = np.exp(logits) / np.sum(np.exp(logits))
-        # Expected value from White's perspective
         score_stm = probs[1] * 1.0 + probs[2] * 2.0
-        # If it's Black's turn, the NN output is from Black's perspective
         if board.turn == chess.BLACK:
             return 2.0 - score_stm
         return score_stm
@@ -70,34 +67,21 @@ class NeuralMinimax:
         wdl_white = int(round(score))
         return wdl_white
 
-# Failing FENs from E328 audit (200k positions)
+# Failing FENs from E189 audit (200k positions)
 failing_fens = [
-    "3K4/2p5/4P3/8/8/8/3k4/8 b - - 0 1",
-    "8/8/4K1P1/8/8/3p4/2k5/8 b - - 0 1",
-    "8/8/8/3P4/p7/6K1/8/5k2 w - - 0 1",
-    "5K2/8/8/8/5P2/3k2p1/8/8 w - - 0 1",
-    "1K6/8/k7/7P/6p1/8/8/8 b - - 0 1",
-    "8/7k/5K2/8/3P2p1/8/8/8 w - - 0 1",
-    "8/8/8/3p4/8/6P1/K1k5/8 w - - 0 1",
-    "1K6/8/1k3P2/8/8/3p4/8/8 b - - 0 1",
-    "8/8/8/1P3K2/p6k/8/8/8 w - - 0 1",
-    "5K2/8/5k2/6p1/8/8/6P1/8 w - - 0 1",
-    "8/2K5/1P6/8/8/1p6/8/1k6 w - - 0 1",
-    "8/K2k4/8/5p2/P7/8/8/8 w - - 0 1",
-    "8/8/5P1K/8/2p2k2/8/8/8 b - - 0 1",
-    "8/8/K1P5/8/5p2/3k4/8/8 w - - 0 1",
-    "8/8/8/7P/3p4/7K/8/5k2 b - - 0 1",
-    "8/8/3P4/7k/5K2/p7/8/8 w - - 0 1",
-    "8/8/5P2/5K2/8/5k1p/8/8 w - - 0 1",
-    "8/8/1P6/8/4p3/8/5k2/7K b - - 0 1",
-    "5K2/8/3P3k/8/8/7p/8/8 w - - 0 1",
-    "8/8/2P5/8/p7/4K3/8/4k3 b - - 0 1"
+    "8/7Q/8/2K5/8/8/5p2/5k2 w - - 0 1",
+    "8/2Q5/8/3K4/8/5p2/8/5k2 b - - 0 1",
+    "8/8/8/2K1Q3/8/2k5/5p2/8 b - - 0 1",
+    "3Q4/3K4/8/8/5p2/8/4k3/8 b - - 0 1",
+    "8/8/8/4K3/8/5pk1/3Q4/8 b - - 0 1",
+    "8/8/3K2Q1/8/8/5p2/8/5k2 b - - 0 1"
 ]
 
 if __name__ == "__main__":
-    onnx_path = "data/kpvkp_v5_eval_e328.onnx"
+    onnx_path = "data/kqvkp_v5_eval_e189.onnx"
     syzygy_path = "syzygy/"
-    searcher = NeuralMinimax(onnx_path, syzygy_path, version=5, target_config="KPvKP")
+    # We pass the target config so it knows when pieces have been captured/promoted
+    searcher = NeuralMinimax(onnx_path, syzygy_path, version=5, target_config="KQvKP")
     
     print(f"{'FEN':<35} | Syzygy | D0 | D2 | D4 | D6")
     print("-" * 65)
