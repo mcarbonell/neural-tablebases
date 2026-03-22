@@ -93,7 +93,7 @@ def train_large_scale(args):
     train_loader = DataLoader(
         torch.utils.data.Subset(full_dataset, train_indices),
         batch_size=args.batch_size,
-        shuffle=True, # Shuffling over 10% shards might be slow, but essential for ML
+        shuffle=False, # ¡CRÍTICO! Debe ser False. Los shards ya están barajados internamente. Si es True, causa saltos de disco masivos y OOM.
         num_workers=0, # Higher is complex with on-demand loading
         pin_memory=False
     )
@@ -111,6 +111,15 @@ def train_large_scale(args):
         num_wdl_classes=3,
         input_size=full_dataset.input_size
     ).to(device)
+
+    if args.load_path and os.path.exists(args.load_path):
+        print(f"Loading weights from {args.load_path} for continuous learning...")
+        try:
+            state_dict = torch.load(args.load_path, map_location=device)
+            model.load_state_dict(state_dict, strict=True)
+            print("Weights loaded successfully!")
+        except Exception as e:
+            print(f"WARNING: Could not load weights from {args.load_path}: {e}")
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     wdl_criterion = nn.CrossEntropyLoss()
@@ -185,6 +194,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--model", type=str, default="mlp")
     parser.add_argument("--model_name", type=str, default="krpvkp_v5")
+    parser.add_argument("--load_path", type=str, default=None, help="Load weights from checkpoint")
     args = parser.parse_args()
     
     train_large_scale(args)

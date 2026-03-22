@@ -109,7 +109,11 @@ Torre en esquina protegida por rey
 
 ---
 
-## 3. KBNvK - Rey+Alfil+Caballo vs Rey
+## 3. KBNvK - Rey+Alfil+Caballo vs Rey ✅ FINALIZADO
+
+**Estado:** Entrenado con éxito en la V5 (Marzo 21, 2026).
+- **Validation Accuracy:** 99.96%
+- **DTZ MAE:** 2.05
 
 **Dificultad para el modelo:** ⭐⭐ Media
 

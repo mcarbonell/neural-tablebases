@@ -96,6 +96,18 @@ class TablebaseDataset(Dataset):
             self.num_pieces = 5
             self.use_relative_encoding = True
             self.encoding_version = 4
+        elif self.input_size == 57:
+            self.num_pieces = 3
+            self.use_relative_encoding = True
+            self.encoding_version = 6
+        elif self.input_size == 84:
+            self.num_pieces = 4
+            self.use_relative_encoding = True
+            self.encoding_version = 6
+        elif self.input_size == 115:
+            self.num_pieces = 5
+            self.use_relative_encoding = True
+            self.encoding_version = 6
         elif self.input_size == 101:
             self.num_pieces = 5
             self.use_relative_encoding = True

@@ -24,10 +24,9 @@ En lugar de entrenar solo con un archivo `.npz`, debemos crear un **DataLoader M
 ## 📈 3. Protocolo de Entrenamiento (Curriculum Learning)
 Para acelerar la convergencia, no empezamos de cero. Seguimos esta cadena de mando:
 
-1.  **Fase 1 (Cimientos):** Entrenar solo con **Reyes y Peones** (`KPvK`, `KPvKP`). La red aprende el movimiento básico y la importancia de la promoción.
-2.  **Fase 2 (Alcance):** Cargar pesos de Fase 1 y añadir **Damas y Torres** (`KQvK`, `KRvK`). La red aprende las líneas largas.
-3.  **Fase 3 (Técnica):** Añadir finales complejos (`KBNvK`, `KRvKN`).
-4.  **Fase 4 (Consolidación Universal):** Entrenar con el **Remix Total** usando un Learning Rate muy bajo (`1e-5`) para fusionar todos los conocimientos sin "romper" nada.
+1.  **Fase 1 (Cimientos):** Entrenar solo **Sin Peones** (`KRvK`, `KQvKN`).
+1.  **Fase 2 (Peones):** Entrenar solo **Con Peones** (`KPvK`, `KPvKP`). La red ya ha aprendido lo que pasa tras coronar los peones.
+4.  **Fase 3 (Consolidación Universal):** Entrenar con el **Remix Total** usando un Learning Rate muy bajo (`1e-5`) para fusionar todos los conocimientos sin "romper" nada.
 
 ## 🛠️ 4. Herramientas Necesarias
 Para automatizar esto, necesitaremos desarrollar:

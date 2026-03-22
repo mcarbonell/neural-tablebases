@@ -1,26 +1,31 @@
 # Project Status
 
-Last updated: March 20, 2026
+Last updated: March 21, 2026
 
 ## Current Objective
 
-Stabilize the V5-style canonical KPvKP pipeline, keep documentation aligned with the codebase, and use that line as the reference path for future 4-piece and 5-piece work.
+Expand the V5 Universal Network to complex 4-piece endgames using curriculum learning. Specifically, the KBNvK model has been successfully trained, achieving near-perfect accuracy and validating the WDL-Directed DTZ logic via Negamax. Keep documentation aligned with the codebase for future macro-network integrations.
 
 ## Active State
+
+### Recently Completed
+1. **KBNvK (Rey+Alfil+Caballo vs Rey) V5 Training**
+   - Trained using Transfer Learning from `mlp_kpvkp_v5_post_queen`.
+   - Reached early stopping after 242 epochs.
+   - **Validation Accuracy**: `0.9996` (99.96%)
+   - **Validation Loss**: `0.0024`
+   - **DTZ MAE**: `2.05` half-moves (plies).
+   - Checkpoint saved to `data/mlp_kbnvk_v5_final.pth` and ONNX exported.
+
+2. **ONNX-based DTZ-aware Search Workflow**
+   - Implemented a robust *WDL-Directed DTZ Negamax* in `src/check_dtz_progress.py`.
+   - Solved the local Syzygy lone-king dictionary lookup bug in `python-chess` by adding dictionary aliases during initialization.
+   - The search prioritizes WDL classification buckets (Win/Draw/Loss) before actively minimizing/maximizing Side-To-Move (STM) DTZ distance as tiebreakers.
 
 ### In progress
 
 1. KPvKP canonical training on `data/v5/KPvKP_canonical.npz`
-   - Dataset metadata reports `7,436,088` positions.
-   - Relative encoding metadata is `version = 5`.
-   - Current best checkpoint on March 20, 2026:
-     - `val_acc = 0.9964`
-     - `val_loss = 0.0104`
-     - `val_dtz_mae = 0.0373`
-
-2. ONNX-based evaluation/search workflow
-   - ONNX exports for KPvK and KPvKP are already present in `data/`.
-   - Search correction remains part of the practical path to perfect behavior on hard cases.
+   - Secondary refinements on KPvKP (V5).
 
 ### Available now
 
@@ -61,9 +66,9 @@ Stabilize the V5-style canonical KPvKP pipeline, keep documentation aligned with
 
 ## Near-Term Priorities
 
-1. Finish the current KPvKP V5 training run and record a stable reference result.
-2. Keep the README/status/docs index synchronized with the latest checkpoints and datasets.
-3. Clarify V4 vs V5 naming in helper scripts where dimensionality-based handling still blurs the distinction.
+1. Test the dual WDL-DTZ Negamax logic against other complex 4-piece datasets natively via ONNX.
+2. Finish the current KPvKP V5 training run and record a stable reference result.
+3. Keep the README/status/docs index synchronized with the latest checkpoints and datasets.
 4. Decide whether the next comparison target is KRRvK training refresh or broader 4-piece/5-piece evaluation tooling.
 
 ## Known Documentation/Code Friction

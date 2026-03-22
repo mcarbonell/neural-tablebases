@@ -18,10 +18,10 @@ def export_model(model_path, output_onnx_path, metadata_path):
     if 'dataset' in meta and 'input_size' in meta['dataset']:
         input_size = meta['dataset']['input_size']
         num_pieces = meta['dataset']['num_pieces']
-    elif 'dataset_metadata' in meta and 'dimensions' in meta['dataset_metadata']:
-        input_size = meta['dataset_metadata']['dimensions']
-        config = meta['dataset_metadata'].get('config', 'KQKvK')
-        sides = config.split('v') if 'v' in config else [config[:-1], config[-1]]
+    elif 'dimensions' in meta:
+        input_size = meta['dimensions']
+        config = meta.get('config', 'KQKvK')
+        sides = config.lower().split('v')
         num_pieces = len(sides[0]) + len(sides[1])
     else:
         # Defaults for V4/V5 if not found

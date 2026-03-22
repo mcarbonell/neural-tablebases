@@ -236,6 +236,10 @@ def encode_board_relative(board: chess.Board, use_move_distance: bool = False, v
     """
     Relative/geometric encoding that scales to any endgame.
     
+    Version 6 (Tactical):
+        - Inherits V5 properties (normalized perspective, sorted, promotion prog).
+        - Adds 4 tactical booleans/floats per piece (is_pinned, norm_att, norm_def, is_hanging).
+        
     Version 5 (Experimental):
         - Normalized perspective (side to move is always White)
         - King is ALWAYS the first piece in its color block (Sorting: King first)
@@ -312,6 +316,24 @@ def encode_board_relative(board: chess.Board, use_move_distance: bool = False, v
                 else:
                     progress = (7 - rank) / 7.0
             encoding.append(progress)
+            
+        if version >= 6:
+            # Tactical features (V6)
+            is_pinned = 1.0 if board.is_pinned(piece.color, square) else 0.0
+            
+            attackers = board.attackers(not piece.color, square)
+            att_count = len(attackers)
+            
+            defenders = board.attackers(piece.color, square)
+            def_count = len(defenders)
+            
+            is_hanging = 1.0 if att_count > def_count else 0.0
+            
+            # Normalize counts (cap at 3 to fit [0, 1] range reasonably well)
+            norm_att = min(att_count / 3.0, 1.0)
+            norm_def = min(def_count / 3.0, 1.0)
+            
+            encoding.extend([is_pinned, norm_att, norm_def, is_hanging])
     
     # 2. Encode pairwise relationships
     num_pieces = len(pieces_on_board)
