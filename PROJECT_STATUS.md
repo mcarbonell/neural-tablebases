@@ -1,23 +1,25 @@
 # Project Status
 
-Last updated: March 21, 2026
+Last updated: March 23, 2026
 
 ## Current Objective
 
-Expand the V5 Universal Network to complex 4-piece endgames using curriculum learning. Specifically, the KBNvK model has been successfully trained, achieving near-perfect accuracy and validating the WDL-Directed DTZ logic via Negamax. Keep documentation aligned with the codebase for future macro-network integrations.
+Consolidate the **Universal V6 Network** incorporating tactical pre-computed logic (`is_pinned`, `is_hanging`, `norm_att/def`). The objective is to eliminate "Geometric Catastrophic Forgetting" and reach >99% accuracy across all 3 and 4-piece endgames by combining classical movegen insights with neural evaluation.
 
 ## Active State
 
 ### Recently Completed
-1. **KBNvK (Rey+Alfil+Caballo vs Rey) V5 Training**
-   - Trained using Transfer Learning from `mlp_kpvkp_v5_post_queen`.
-   - Reached early stopping after 242 epochs.
-   - **Validation Accuracy**: `0.9996` (99.96%)
-   - **Validation Loss**: `0.0024`
-   - **DTZ MAE**: `2.05` half-moves (plies).
-   - Checkpoint saved to `data/mlp_kbnvk_v5_final.pth` and ONNX exported.
+1. **V6 Tactical Encoding (3-4-5 Piece Universe)**
+   - Implemented `is_pinned`, `is_hanging`, `norm_att`, and `norm_def` in `src/generate_datasets.py`.
+   - Generated the full 3 and 4-piece V6 dataset (~40M positions) across 36 endgames.
+   - Built 10 universal shards with 91/115 variables padding in `data/shards_v6`.
 
-2. **ONNX-based DTZ-aware Search Workflow**
+2. **Universal V6 Training Pilot**
+   - Launched large-scale training on AMD GPU (DirectML).
+   - **Performance Milestone**: Reached **90% Validation Accuracy** in less than 20% of the first epoch.
+   - Confirmed tactical flags provide an exponential gradient boost compared to V5.
+
+3. **ONNX-based DTZ-aware Search Workflow**
    - Implemented a robust *WDL-Directed DTZ Negamax* in `src/check_dtz_progress.py`.
    - Solved the local Syzygy lone-king dictionary lookup bug in `python-chess` by adding dictionary aliases during initialization.
    - The search prioritizes WDL classification buckets (Win/Draw/Loss) before actively minimizing/maximizing Side-To-Move (STM) DTZ distance as tiebreakers.
@@ -97,4 +99,4 @@ When docs disagree, prefer this order:
 
 ---
 
-Current focus: KPvKP canonical V5 training and harmonized project documentation
+Current focus: Universal V6 training with tactical encoding and multi-piece shard consolidation.

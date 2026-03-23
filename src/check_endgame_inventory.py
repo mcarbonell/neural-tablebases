@@ -3,7 +3,7 @@ import re
 
 def check_inventory():
     syzygy_path = "syzygy"
-    data_path = "data/v5"
+    data_path = "data/v6"
     
     # 1. Get all Syzygy files (3 and 4 pieces)
     # Piece types: K, Q, R, B, N, P
