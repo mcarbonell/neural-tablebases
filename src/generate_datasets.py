@@ -39,6 +39,12 @@ def flip_board(board: chess.Board) -> chess.Board:
     return new_board
 
 def encode_board(board: chess.Board, compact: bool = True, relative: bool = False, use_move_distance: bool = False) -> np.ndarray:
+    if str(relative).lower() == 'v7':
+        return encode_board_relative(board, version=7)
+        
+    if str(relative).lower() == 'v6':
+        return encode_board_relative(board, version=6)
+        
     if str(relative).lower() == 'v5':
         return encode_board_relative(board, version=5)
         
@@ -46,8 +52,8 @@ def encode_board(board: chess.Board, compact: bool = True, relative: bool = Fals
         return encode_board_relative(board, version=4)
         
     if relative:
-        # Relative encoding: geometric features + piece info
-        return encode_board_relative(board, use_move_distance=use_move_distance)
+        # Relative encoding: defaults to v6 if not specified
+        return encode_board_relative(board, version=6, use_move_distance=use_move_distance)
     
     if not compact:
         # Full encoding: 768 dimensions (12 pieces * 64 squares)
@@ -334,6 +340,32 @@ def encode_board_relative(board: chess.Board, use_move_distance: bool = False, v
             norm_def = min(def_count / 3.0, 1.0)
             
             encoding.extend([is_pinned, norm_att, norm_def, is_hanging])
+            
+        if version >= 7:
+            # Dynamic Mobility features (V7)
+            # 1. Safe Mobility: Count of moves to squares not attacked by enemy
+            # Note: 'piece' and 'square' are already available from the loop header
+            
+            # Generate pseudo-legal moves for this piece (faster than fully legal for this purpose)
+            # and filter by those that are not attacked
+            safe_count = 0
+            # For each square the piece can attack/reach
+            # chess.Board has .attacks(square) which returns Bitboard of squares it attacks
+            reachable_squares = board.attacks(square)
+            for target_sq in reachable_squares:
+                # If target square is not attacked by enemy, it's a "safe breath"
+                if not board.is_attacked_by(not piece.color, target_sq):
+                    safe_count += 1
+            
+            # Normalize by 14 (max radius for queen/rook)
+            norm_safe = min(safe_count / 14.0, 1.0)
+            
+            # 2. King Oxygen: Specific focus if it's the enemy king
+            # This is already handled by safe_count if this piece IS a king, 
+            # but we can add a flag to emphasize it.
+            is_king = 1.0 if piece.piece_type == chess.KING else 0.0
+            
+            encoding.extend([norm_safe, is_king])
     
     # 2. Encode pairwise relationships
     num_pieces = len(pieces_on_board)

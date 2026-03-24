@@ -365,7 +365,9 @@ def generate_dataset_parallel(syzygy_path: str, output_dir: str, config: str,
     # Handle encoding version (encode_board expects relative=True or relative="v5" or "v6")
     rel_arg = relative
     if relative:
-        if version == 6:
+        if version == 7:
+            rel_arg = "v7"
+        elif version == 6:
             rel_arg = "v6"
         elif version == 5:
             rel_arg = "v5"
