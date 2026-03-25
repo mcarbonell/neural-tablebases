@@ -1,23 +1,28 @@
 # Project Status
 
-Last updated: March 23, 2026
+Last updated: March 25, 2026
 
 ## Current Objective
 
-Consolidate the **Universal V6 Network** incorporating tactical pre-computed logic (`is_pinned`, `is_hanging`, `norm_att/def`). The objective is to eliminate "Geometric Catastrophic Forgetting" and reach >99% accuracy across all 3 and 4-piece endgames by combining classical movegen insights with neural evaluation.
+Achieve >99.5% accuracy using the **Universal V7 Network** which incorporates "Dynamic Mobility" (safe squares) and "King Oxygen" features. Following the success of V6 (which reached 99.21% on V1-simple encoding), we aim to leverage:
+- [x] **KRPvK Restoration**: Regeneration complete (2026-03-25). CRC bug resolved.
+- [x] **V7 Sharding**: 10 Universal Shards built (4M samples each, 40M total). Prefix: `v7_universe`.
+- [>] **V7 Training**: Universal MLP training started (DirectML). Targeting 99.5%+ accuracy.
+- [ ] **Model Search Testing**: Evaluate V7 models with Minimax-2.
 
 ## Active State
 
 ### Recently Completed
-1. **V6 Tactical Encoding (3-4-5 Piece Universe)**
-   - Implemented `is_pinned`, `is_hanging`, `norm_att`, and `norm_def` in `src/generate_datasets.py`.
-   - Generated the full 3 and 4-piece V6 dataset (~40M positions) across 36 endgames.
-   - Built 10 universal shards with 91/115 variables padding in `data/shards_v6`.
+1. **Universal V6 Training (Refined Milestone)**
+   - Reached **99.21% Validation Accuracy** using the large-scale MLP architecture.
+   - **Discovery**: Due to an old parameter-passing bug in `encode_board`, the V6 shards were actually encoded with **V1 Simple Features** (Coords + Types + STM). Reaching >99% on such basic data proves the potential of the core universal architecture.
+   - Verified that the model recognizes complex wins (e.g. `KRPvK` scored at 1.995).
 
-2. **Universal V6 Training Pilot**
-   - Launched large-scale training on AMD GPU (DirectML).
-   - **Performance Milestone**: Reached **90% Validation Accuracy** in less than 20% of the first epoch.
-   - Confirmed tactical flags provide an exponential gradient boost compared to V5.
+2. **Full V7 Dataset Generation (Mobility & Oxygen)**
+   - Implemented `safe_mobility` and `is_king_oxygen` piece features.
+   - Generated the full 3 and 4-piece V7 dataset (~40M positions).
+   - Dimensions: 3-piece (63), 4-piece (92), 5-piece (127).
+   - Currently regenerating `KRPVK_canonical.npz` (9M positions) to fix CRC corruption.
 
 3. **ONNX-based DTZ-aware Search Workflow**
    - Implemented a robust *WDL-Directed DTZ Negamax* in `src/check_dtz_progress.py`.
@@ -26,8 +31,13 @@ Consolidate the **Universal V6 Network** incorporating tactical pre-computed log
 
 ### In progress
 
-1. KPvKP canonical training on `data/v5/KPvKP_canonical.npz`
-   - Secondary refinements on KPvKP (V5).
+1. **V7 Shard Packing**
+   - Preparing Universal Shards (10 shards, 4M samples each) using V7 encoding.
+   - Using dynamic padding to 92 inputs for 3 and 4-piece universal coverage.
+
+2. **Universal V7 Large Scale Training**
+   - Goal: Surpass 99.2% using tactical mobility and oxygen features.
+   - Environment: `venv_gpu` with DirectML.
 
 ### Available now
 
@@ -99,4 +109,4 @@ When docs disagree, prefer this order:
 
 ---
 
-Current focus: Universal V6 training with tactical encoding and multi-piece shard consolidation.
+Current focus: Shading and Training Universal V7 (Dynamic Mobility).

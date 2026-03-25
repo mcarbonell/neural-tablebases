@@ -50,16 +50,22 @@ class NeuralSearcher:
         
         # Mapping from input_size to config
         config_map = {
+            # Version 1 (Coords + Type + Color + STM)
             43: (3, True, 1),
-            45: (3, True, 4),
             65: (4, True, 1),
+            91: (4, True, 1), # V6 model has 91 inputs but uses 4-piece hidden layers
+            # Version 4 (Pawn Progress + Normalized STM)
+            45: (3, True, 4),
             68: (4, True, 4),
-            91: (5, True, 1),
             95: (5, True, 4),
-            46: (3, True, 2),
-            64: (3, True, 3),
-            107: (4, True, 3),
-            161: (5, True, 3)
+            # Version 6 (Tactical)
+            57: (3, True, 6),
+            84: (4, True, 6),
+            115: (5, True, 6),
+            # Version 7 (Dynamic Mobility + King Oxygen)
+            63: (3, True, 7),
+            92: (4, True, 7),
+            127: (5, True, 7)
         }
         
         if input_size in config_map:
@@ -179,10 +185,24 @@ class NeuralSearcher:
 
         relative_arg = False
         if self.use_relative_encoding:
-            relative_arg = ('v4' if self.encoding_version == 4 else True)
+            # Pass numeric version to encode_board
+            relative_arg = f"v{self.encoding_version}"
 
         x = encode_board(board_enc, relative=relative_arg,
                          use_move_distance=(self.encoding_version == 3))
+        
+        # --- UNIVERSAL PADDING ---
+        if len(x) < self.input_size:
+            # If it's V1 and has STM bit at the end, we need to preserve it at the very last position
+            if self.encoding_version == 1 and self.use_relative_encoding:
+                stm = x[-1]
+                x_no_stm = x[:-1]
+                padding = np.zeros(self.input_size - len(x), dtype=np.float32)
+                x = np.concatenate([x_no_stm, padding, [stm]])
+            else:
+                padding = np.zeros(self.input_size - len(x), dtype=np.float32)
+                x = np.concatenate([x, padding])
+            
         x_tensor = torch.from_numpy(x).float().unsqueeze(0).to(self.device)
         
         with torch.no_grad():

@@ -4,7 +4,7 @@ import numpy as np
 import argparse
 from tqdm import tqdm
 
-def build_shards(input_dir, output_dir, samples_per_shard=4_000_000, num_shards=10):
+def build_shards(input_dir, output_dir, samples_per_shard=4_000_000, num_shards=10, prefix="v7_universe"):
     os.makedirs(output_dir, exist_ok=True)
     
     # Filtrar solo los datasets canonical
@@ -13,6 +13,10 @@ def build_shards(input_dir, output_dir, samples_per_shard=4_000_000, num_shards=
         print(f"No *_canonical.npz files found in {input_dir}")
         return
         
+    # Skip shards that are currently being written (e.g. they don't have metadata or are temporary)
+    # We filter out files that might be corrupted or incomplete if they are too small
+    # but for now we trust the canonical files.
+
     print(f"Encontrados {len(npz_files)} datasets. Construyendo {num_shards} shards de ~{samples_per_shard} posiciones...")
     
     # 1. Cargar metadatos mmap de los datasets para ver su tamaño y la dimensión de 'x'
@@ -98,17 +102,19 @@ def build_shards(input_dir, output_dir, samples_per_shard=4_000_000, num_shards=
         full_dtz = full_dtz[shuffle_idx]
         
         # Guardar en disco el Shard final
-        out_file = os.path.join(output_dir, f"v5_universe_shard_{shard_idx+1:03d}.npz")
+        out_file = os.path.join(output_dir, f"{prefix}_shard_{shard_idx+1:03d}.npz")
         # Usamos savez_compressed para no reventar el disco
         np.savez_compressed(out_file, x=full_x, wdl=full_wdl, dtz=full_dtz)
         print(f" [+] Shard Guardado: {out_file} (Total: {len(full_wdl)} posiciones).")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input_dir", type=str, default="data/v5", help="Directorio con los npz_canonical")
-    parser.add_argument("--output_dir", type=str, default="data/shards", help="Directorio salida de los shards")
+    parser.add_argument("--input_dir", type=str, default="data/v7", help="Directorio con los npz_canonical")
+    parser.add_argument("--output_dir", type=str, default="data/shards_v7", help="Directorio salida de los shards")
     parser.add_argument("--samples", type=int, default=4000000, help="Posiciones totales por shard")
     parser.add_argument("--shards", type=int, default=10, help="Número de shards a generar")
+    parser.add_argument("--prefix", type=str, default="v7_universe", help="Prefijo para los nombres de los shards")
     args = parser.parse_args()
     
-    build_shards(args.input_dir, args.output_dir, args.samples, args.shards)
+    build_shards(args.input_dir, args.output_dir, args.samples, args.shards, args.prefix)
+

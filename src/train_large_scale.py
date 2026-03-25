@@ -78,11 +78,23 @@ def train_large_scale(args):
             print(f"Using DirectML: {device}")
         except:
             pass
+    # Setup Logger
+    os.makedirs("data/models", exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file_path = f"data/models/{args.model_name}_{timestamp}.log"
+    log_file = open(log_file_path, "w")
     
-    print(f"Starting Large-Scale Training on {device}")
+    def log_print(msg):
+        print(msg)
+        log_file.write(msg + "\n")
+        log_file.flush()
+
+    log_print(f"Starting Large-Scale Training on {device}")
+    log_print(f"Logs being saved to: {log_file_path}")
     
     # Dataset
     full_dataset = StreamingShardedDataset(args.data_dir)
+    log_print(f"Streaming dataset initialized: {len(full_dataset.shard_files)} shards, {full_dataset.total_size:,} total positions.")
     
     # Simple Split (for safety, avoid huge shuffles)
     train_size = int(0.9 * len(full_dataset))
@@ -113,13 +125,13 @@ def train_large_scale(args):
     ).to(device)
 
     if args.load_path and os.path.exists(args.load_path):
-        print(f"Loading weights from {args.load_path} for continuous learning...")
+        log_print(f"Loading weights from {args.load_path} for continuous learning...")
         try:
             state_dict = torch.load(args.load_path, map_location=device)
             model.load_state_dict(state_dict, strict=True)
-            print("Weights loaded successfully!")
+            log_print("Weights loaded successfully!")
         except Exception as e:
-            print(f"WARNING: Could not load weights from {args.load_path}: {e}")
+            log_print(f"WARNING: Could not load weights from {args.load_path}: {e}")
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     wdl_criterion = nn.CrossEntropyLoss()
@@ -127,7 +139,7 @@ def train_large_scale(args):
 
     best_val_acc = 0.0
     
-    print(f"Entering training loop... (Target: {args.epochs} epochs)")
+    log_print(f"Entering training loop... (Target: {args.epochs} epochs)")
     
     for epoch in range(args.epochs):
         model.train()
@@ -160,7 +172,7 @@ def train_large_scale(args):
             if i % 100 == 0:
                 elapsed = time.time() - start_time
                 throughput = total / elapsed if elapsed > 0 else 0
-                print(f"Epoch {epoch+1} | Batch {i}/{len(train_loader)} | Loss: {loss.item():.4f} | Acc: {100*correct/total:2f}% | Speed: {throughput:.0f} pos/s")
+                log_print(f"Epoch {epoch+1} | Batch {i}/{len(train_loader)} | Loss: {loss.item():.4f} | Acc: {100*correct/total:2f}% | Speed: {throughput:.0f} pos/s")
 
         # Validation
         model.eval()
@@ -176,18 +188,19 @@ def train_large_scale(args):
                 val_correct += (pred == wdl_labels).sum().item()
         
         val_acc = val_correct / val_total
-        print(f"END EPOCH {epoch+1} | Val Acc: {val_acc:.4f} | Time: {time.time() - start_time:.2f}s")
+        log_print(f"END EPOCH {epoch+1} | Val Acc: {val_acc:.4f} | Time: {time.time() - start_time:.2f}s")
         
         if val_acc > best_val_acc:
             best_val_acc = val_acc
             save_path = f"data/models/{args.model_name}_large_scale_best.pth"
-            os.makedirs("data/models", exist_ok=True)
             torch.save(model.state_dict(), save_path)
-            print(f"New best model saved to {save_path}")
+            log_print(f"New best model saved to {save_path}")
+    
+    log_file.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_dir", type=str, required=True, help="Path to directory with .npz shards")
+    parser.add_argument("--data_dir", "--shards_dir", type=str, required=True, help="Path to directory with .npz shards")
     parser.add_argument("--num_pieces", type=int, default=5, help="Number of pieces in the endgame")
     parser.add_argument("--batch_size", type=int, default=16384, help="Large batch size for GPU utilization")
     parser.add_argument("--epochs", type=int, default=100)

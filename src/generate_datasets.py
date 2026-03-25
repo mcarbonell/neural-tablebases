@@ -50,6 +50,15 @@ def encode_board(board: chess.Board, compact: bool = True, relative: bool = Fals
         
     if str(relative).lower() == 'v4':
         return encode_board_relative(board, version=4)
+
+    if str(relative).lower() == 'v3':
+        return encode_board_relative(board, version=3)
+        
+    if str(relative).lower() == 'v2':
+        return encode_board_relative(board, version=2)
+        
+    if str(relative).lower() == 'v1':
+        return encode_board_relative(board, version=1)
         
     if relative:
         # Relative encoding: defaults to v6 if not specified
