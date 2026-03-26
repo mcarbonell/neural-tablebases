@@ -1,0 +1,18 @@
+[package]
+name = "rust-gnn-engine"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "rust_gnn_engine"
+crate_type = ["cdylib", "rlib"]
+
+[dependencies]
+# No dependencies for a lean engine
+# wasm-bindgen is not needed for Python/C bridge
+
+[profile.release]
+opt_level = 3
+lto = true
+codegen_units = 1
+panic = "abort"

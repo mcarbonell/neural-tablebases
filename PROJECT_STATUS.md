@@ -2,32 +2,31 @@
 
 Last updated: March 25, 2026
 
-## Current Objective
+## Current Objective: The V8 GNN Revolution 🧬♟️
 
-Achieve >99.5% accuracy using the **Universal V7 Network** which incorporates "Dynamic Mobility" (safe squares) and "King Oxygen" features. Following the success of V6 (which reached 99.21% on V1-simple encoding), we aim to leverage:
-- [x] **KRPvK Restoration**: Regeneration complete (2026-03-25). CRC bug resolved.
-- [x] **V7 Sharding**: 10 Universal Shards built (4M samples each, 40M total). Prefix: `v7_universe`.
-- [>] **V7 Training**: Universal MLP training started (DirectML). Targeting 99.5%+ accuracy.
-- [ ] **Model Search Testing**: Evaluate V7 models with Minimax-2.
+Achieve **Global Parity** with Syzygy using the **V8 Graph Neural Network (GNN)** architecture. Following the massive success of the V8 prototype (100% accuracy on KRvK), we are transitioning from flat MLP features to a **Topological Message Passing** architecture.
+- [x] **Rust Engine X88**: Ported and validated (100% tactical parity WAC).
+- [x] **GNN Feature Extraction**: 16 tactical channels + node flags implemented.
+- [x] **V8 Prototype**: Reached **100.00% Accuracy** on KRvK in 5 epochs.
+- [ ] **V8 Universal Sharding**: Generate 40M topological positions (Est. 1.8 GB).
+- [ ] **V8 Full Training**: Scale ChessGnnV8 to the universal dataset.
+- [ ] **GNN-Search Integration**: Low-latency GNN inference for tactical search.
 
 ## Active State
 
 ### Recently Completed
-1. **Universal V6 Training (Refined Milestone)**
-   - Reached **99.21% Validation Accuracy** using the large-scale MLP architecture.
-   - **Discovery**: Due to an old parameter-passing bug in `encode_board`, the V6 shards were actually encoded with **V1 Simple Features** (Coords + Types + STM). Reaching >99% on such basic data proves the potential of the core universal architecture.
-   - Verified that the model recognizes complex wins (e.g. `KRPvK` scored at 1.995).
+1. **Rust MoveGen X88 & Tactical Enrichment**
+   - High-performance Rust bridge with 100% WAC tactical precision.
+   - Extracts 16 edge types (Captures, Checks, Promotions, etc.) and node flags (Safe, Hanging, Protected).
 
-2. **Full V7 Dataset Generation (Mobility & Oxygen)**
-   - Implemented `safe_mobility` and `is_king_oxygen` piece features.
-   - Generated the full 3 and 4-piece V7 dataset (~40M positions).
-   - Dimensions: 3-piece (63), 4-piece (92), 5-piece (127).
-   - Currently regenerating `KRPVK_canonical.npz` (9M positions) to fix CRC corruption.
+2. **V8 GNN Prototype (Breakthrough Milestone)**
+   - Implemented `ChessGnnV8` (Relational GNN in pure PyTorch).
+   - Achieved **100% Accuracy** on KRvK (9,000 positions).
+   - **Discovery**: Topology-aware networks solve the tablebase problem materially better than flat MLPs.
+   - **Extreme Compression**: Topological shards are ~30x smaller than V7 (40M positions ~ 1.8 GB).
 
-3. **ONNX-based DTZ-aware Search Workflow**
-   - Implemented a robust *WDL-Directed DTZ Negamax* in `src/check_dtz_progress.py`.
-   - Solved the local Syzygy lone-king dictionary lookup bug in `python-chess` by adding dictionary aliases during initialization.
-   - The search prioritizes WDL classification buckets (Win/Draw/Loss) before actively minimizing/maximizing Side-To-Move (STM) DTZ distance as tiebreakers.
+3. **Universal V7 Training (Legacy Branch)**
+   - Reached **98.92% (Epoch 22)**. Solid, but surpassed by GNN potential.
 
 ### In progress
 
@@ -109,4 +108,4 @@ When docs disagree, prefer this order:
 
 ---
 
-Current focus: Shading and Training Universal V7 (Dynamic Mobility).
+Current focus: Scaling V8 GNN Universal training.

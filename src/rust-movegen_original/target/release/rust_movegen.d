@@ -1,0 +1,1 @@
+C:\Users\mrcm_\Local\proj\ajedrez\movegen\rust-movegen\target\release\rust_movegen.dll: C:\Users\mrcm_\Local\proj\ajedrez\movegen\rust-movegen\src\board.rs C:\Users\mrcm_\Local\proj\ajedrez\movegen\rust-movegen\src\lib.rs C:\Users\mrcm_\Local\proj\ajedrez\movegen\rust-movegen\src\types.rs
