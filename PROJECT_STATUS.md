@@ -30,35 +30,26 @@ Achieve **Global Parity** with Syzygy using the **V8 Graph Neural Network (GNN)*
 
 ### In progress
 
-1. **V7 Shard Packing**
-   - Preparing Universal Shards (10 shards, 4M samples each) using V7 encoding.
-   - Using dynamic padding to 92 inputs for 3 and 4-piece universal coverage.
-
-2. **Universal V7 Large Scale Training**
-   - Goal: Surpass 99.2% using tactical mobility and oxygen features.
-   - Environment: `venv_gpu` with DirectML.
+1. **V8 Mass Generation**
+   - Universal 3-4-5 Universe generation into topological shards.
+   - Status: Generator refactored for exhaustive unranking and auto-sharding.
 
 ### Available now
 
 1. Canonical and non-canonical datasets for the main 3-piece baselines:
-   - KQvK
-   - KRvK
-   - KPvK
+   - KQvK, KRvK, KPvK
 
-2. Larger datasets already present locally:
-   - KPvKP canonical
-   - KRPvKP canonical
-   - KRRvK full
-   - KRRvK canonical
+2. Industrial GNN V8 Infrastructure:
+   - `src/generate_gnn_dataset.py`: Exhaustive GNN generator.
+   - `src/train_v8.py`: Multi-shard relational training.
 
 3. Hardware path for AMD GPU training on Windows through DirectML.
 
 ## What Is Settled
 
-1. Geometric/relative encodings outperform one-hot style baselines by a large margin in this project.
-2. Canonical forms are integrated into the primary generator and are no longer an experimental side path.
-3. The parallel generator is the standard dataset creation path for serious runs.
-4. Metadata sidecars for datasets and checkpoints are now an important part of reproducibility.
+1. GNNs (Relational Message Passing) materially outperform MLPs for chess tablebases.
+2. Canonical forms are integrated into the primary generator.
+3. Topological compression (16 types) reduces dataset size by 12x vs V7.
 
 ## What Changed Since The Older Docs
 

@@ -85,9 +85,23 @@ This script checks encoding dimensions, board transformations, canonical form lo
     *   `models.py`: Defines the `MLP` and `SIREN` neural network architectures.
     *   `canonical_forms.py`: Logic for board symmetries and canonical representation.
     *   `encoding_*.py`: Files related to different encoding schemes.
-*   **`data/`**: Default location for generated datasets (`.npz`) and trained models (`.pth`). This directory should be considered ephemeral and is ignored by Git. The `data/smoke` subdirectory contains small datasets suitable for testing.
+*   **`data/`**: Default location for generated datasets (`.npz`), trained models (`.pth`), and training logs (`.log`). This directory should be considered ephemeral and is ignored by Git. The `data/smoke` subdirectory contains small datasets suitable for testing.
 *   **`docs/`**: Extensive project documentation, including the original design, analysis of results, and paper drafts. This is a key resource for understanding the project's evolution and rationale.
 *   **`scripts/`**: Utility and analysis scripts.
 *   **`run_tests.py`**: The primary testing script.
 *   **`syzygy/`**: Intended location for the Syzygy tablebase files used as the source for dataset generation. This directory is ignored by Git.
 *   **`venv_gpu/`**: A pre-configured virtual environment for GPU tasks.
+
+## 4. Project Methodology (Training & Versioning Rules)
+
+To ensure reproducibility and tracking of the neural network's evolution, the following rules MUST be followed:
+
+*   **Mandatory Logging:** All training scripts MUST save logs to disk in the `data/` directory (or a `logs/` subdirectory).
+    *   Log filename format: `train_version_flags.log` (e.g., `train_v8_pro_fast.log`).
+    *   Log header: Every log file MUST start with the exact command string used to launch the training.
+    *   Content: Logs must include epoch metrics (Loss, Accuracy, Speed, etc.) in a human-readable format.
+*   **No File Overwriting:** When a new architecture or significant training variation is created:
+    *   Create a new definition file: `models_v{N}.py`.
+    *   If specialized training logic is needed: `train_v{N}.py`.
+    *   DO NOT overwrite successful previous versions. Maintain a clear history of the project's evolution.
+*   **Weight Checkpoints:** Always save the "best" model weights and periodically save checkpoints with metadata (`_metadata.json`) describing the training status.

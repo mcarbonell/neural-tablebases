@@ -6,25 +6,60 @@ import argparse
 import sys
 import time
 import json
+import math
 import random
 from datetime import timedelta, datetime
 from multiprocessing import cpu_count
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from typing import List, Optional
+from typing import List, Optional, Tuple, Dict, Iterable
+from collections import defaultdict
 
 # Add src to path for relative imports
 sys.path.append(os.path.dirname(__file__))
 from rust_engine import RustGnnEngine
+from canonical_forms import is_canonical
+
+def _perm(n: int, k: int) -> int:
+    """nPk (ordered selections without replacement)."""
+    if k < 0 or k > n:
+        return 0
+    perm_fn = getattr(math, "perm", None)
+    if perm_fn is not None:
+        return perm_fn(n, k)
+    out = 1
+    for x in range(n, n - k, -1):
+        out *= x
+    return out
+
+def unrank_square_permutation(num_pieces: int, idx0: int) -> List[int]:
+    """Unrank the idx0-th k-permutation (ordered selection) of squares [0..63]."""
+    n = 64
+    total = _perm(n, num_pieces)
+    if idx0 < 0 or idx0 >= total:
+        raise ValueError(f"Permutation index out of range: {idx0} (total={total})")
+    idx = idx0
+    available = list(range(n))
+    squares: List[int] = []
+    for i in range(num_pieces):
+        remaining_n = n - i
+        remaining_k = num_pieces - i - 1
+        block = _perm(remaining_n - 1, remaining_k) if remaining_k > 0 else 1
+        pick = idx // block
+        idx = idx % block
+        squares.append(available.pop(pick))
+    return squares
 
 def process_chunk_gnn(args):
     """
     Process a chunk of positions and extract GNN features using Rust.
+    Returns (chunk_id, data_dict, processed_count, kept_count)
     """
-    (chunk_id, syzygy_path, fen_list, wdl_list, dtz_list) = args
+    (chunk_id, syzygy_path, all_pieces, start_idx, count, canonical, canonical_mode) = args
     
     try:
         # Initialize Rust engine for this process
         engine = RustGnnEngine()
+        tablebase = chess.syzygy.open_tablebase(syzygy_path)
         
         chunk_p_ids = []
         chunk_tac = []
@@ -33,158 +68,222 @@ def process_chunk_gnn(args):
         chunk_wdl = []
         chunk_dtz = []
         
-        for fen, wdl, dtz in zip(fen_list, wdl_list, dtz_list):
-            try:
-                p_ids, tac, edges, edge_count = engine.get_raw_features(fen)
-                
-                chunk_p_ids.append(p_ids)
-                chunk_tac.append(tac)
-                chunk_edges.append(edges)
-                chunk_edge_counts.append(edge_count)
-                chunk_wdl.append(wdl)
-                chunk_dtz.append(dtz)
-            except Exception as e:
-                # print(f"Error processing FEN {fen}: {e}")
-                continue
+        num_pieces = len(all_pieces)
+        
+        # Deduplicate identical pieces by enforcing a strict square-ordering
+        groups: Dict[Tuple[int, bool], List[int]] = defaultdict(list)
+        for i, piece in enumerate(all_pieces):
+            groups[(piece.piece_type, piece.color)].append(i)
+        duplicate_groups = [idxs for idxs in groups.values() if len(idxs) > 1]
+        
+        processed = 0
+        kept = 0
+        
+        for i in range(start_idx, start_idx + count):
+            processed += 1
+            squares = unrank_square_permutation(num_pieces, i)
+            
+            # Swapping identical pieces dedup
+            if duplicate_groups:
+                ok = True
+                for idxs in duplicate_groups:
+                    group_squares = [squares[j] for j in idxs]
+                    if group_squares != sorted(group_squares):
+                        ok = False
+                        break
+                if not ok: continue
+
+            board = chess.Board(None)
+            invalid_pawn = False
+            for j, piece in enumerate(all_pieces):
+                sq = squares[j]
+                if piece.piece_type == chess.PAWN:
+                    rank = chess.square_rank(sq)
+                    if rank == 0 or rank == 7:
+                        invalid_pawn = True
+                        break
+                board.set_piece_at(sq, piece)
+            if invalid_pawn: continue
+            
+            for turn in [chess.WHITE, chess.BLACK]:
+                board.turn = turn
+                if board.is_valid():
+                    if canonical and not is_canonical(board, mode=canonical_mode):
+                        continue
+                        
+                    fen = board.fen()
+                    try:
+                        wdl = tablebase.probe_wdl(board)
+                        dtz = tablebase.probe_dtz(board)
+                        
+                        p_ids, tac, edges, edge_count = engine.get_raw_features(fen)
+                        
+                        chunk_p_ids.append(p_ids)
+                        chunk_tac.append(tac)
+                        chunk_edges.append(edges)
+                        chunk_edge_counts.append(edge_count)
+                        chunk_wdl.append(wdl)
+                        chunk_dtz.append(dtz)
+                        kept += 1
+                    except Exception:
+                        continue
+        
+        tablebase.close()
         
         if not chunk_p_ids:
-            return (chunk_id, None)
+            return (chunk_id, None, processed, kept)
             
         return (chunk_id, {
             "p_ids": np.array(chunk_p_ids, dtype=np.int8),
-            "tac": np.array(chunk_tac, dtype=np.uint8),
+            "node_tac": np.array(chunk_tac, dtype=np.uint8),
             "edges": np.array(chunk_edges, dtype=np.uint16),
             "edge_counts": np.array(chunk_edge_counts, dtype=np.uint16),
             "wdl": np.array(chunk_wdl, dtype=np.int8),
             "dtz": np.array(chunk_dtz, dtype=np.int16)
-        })
+        }, processed, kept)
     except Exception as e:
         print(f"Critical error in chunk {chunk_id}: {e}")
-        return (chunk_id, None)
+        return (chunk_id, None, 0, 0)
 
-def generate_gnn_dataset(syzygy_path: str, output_path: str, config: str, 
-                         limit: Optional[int] = None, workers: Optional[int] = None,
-                         chunk_size: int = 5000):
+class ShardManager:
+    def __init__(self, output_dir, shard_size=4_000_000, prefix="v8_shard"):
+        self.output_dir = output_dir
+        self.shard_size = shard_size
+        self.prefix = prefix
+        self.current_shard_idx = 0
+        self.buffer = {
+            "p_ids": [], "node_tac": [], "edges": [], 
+            "edge_counts": [], "wdl": [], "dtz": []
+        }
+        self.buffered_count = 0
+        os.makedirs(output_dir, exist_ok=True)
+
+    def add_data(self, data_dict):
+        if not data_dict: return
+        
+        count = len(data_dict["wdl"])
+        for key in self.buffer:
+            self.buffer[key].append(data_dict[key])
+        self.buffered_count += count
+        
+        if self.buffered_count >= self.shard_size:
+            self.flush()
+
+    def flush(self):
+        if self.buffered_count == 0: return
+        
+        shard_path = os.path.join(self.output_dir, f"{self.prefix}_{self.current_shard_idx:03d}.npz")
+        print(f"Flushing shard {self.current_shard_idx} ({self.buffered_count} positions) to {shard_path}...")
+        
+        np.savez_compressed(
+            shard_path,
+            p_ids=np.concatenate(self.buffer["p_ids"]),
+            node_tac=np.concatenate(self.buffer["node_tac"]),
+            edges=np.concatenate(self.buffer["edges"]),
+            edge_counts=np.concatenate(self.buffer["edge_counts"]),
+            wdl=np.concatenate(self.buffer["wdl"]),
+            dtz=np.concatenate(self.buffer["dtz"])
+        )
+        
+        # Reset buffer
+        for key in self.buffer:
+            self.buffer[key] = []
+        self.buffered_count = 0
+        self.current_shard_idx += 1
+
+def generate_gnn_universe(syzygy_path: str, output_dir: str, configs: List[str], 
+                          limit_per_config: Optional[int] = None, 
+                          workers: Optional[int] = None,
+                          chunk_size: int = 10000,
+                          shard_size: int = 4_000_000,
+                          canonical: bool = True):
     """
-    Generate a GNN-ready dataset using the Rust engine.
+    Generate a Universal GNN dataset for multiple configurations.
     """
-    print(f"Generating GNN dataset for {config}...")
+    print(f"Starting Universal GNN Generation...")
+    print(f"Configs: {configs}")
     
-    # 1. Collect FENs and labels first (Single process is fine for gathering from Syzygy)
-    tablebase = chess.syzygy.open_tablebase(syzygy_path)
+    shard_manager = ShardManager(output_dir, shard_size=shard_size)
     
-    # Simple FEN collector (mimics exhaustive but with limit)
-    # For now, let's use the logic from generate_datasets_parallel but simplified
-    # Or just use a simple random sampling if limit is provided.
-    
-    # For this proof-of-concept, we'll use a simplified version of exhaustive generation
-    # based on the config.
-    
-    # TODO: For high-scale, we should use the unranking logic.
-    # For KRvK / KQvK smoke tests, we can just use a simple generator.
-    
-    def symbols_to_pieces(symbols):
-        return [chess.Piece(chess.PIECE_SYMBOLS.index(s.lower()), chess.WHITE) for s in symbols]
-    
-    white_side, black_side = config.replace('V', 'v').split('v')
-    w_pieces = [chess.Piece(chess.PIECE_SYMBOLS.index(s.lower()), chess.WHITE) for s in white_side]
-    b_pieces = [chess.Piece(chess.PIECE_SYMBOLS.index(s.lower()), chess.BLACK) for s in black_side]
-    all_pieces = w_pieces + b_pieces
-    
-    print(f"Collecting valid positions (limit={limit})...")
-    fens = []
-    wdls = []
-    dtzs = []
-    
-    # Simple random placement for the smoke test
-    count = 0
-    max_attempts = (limit * 20) if limit else 1000000
-    attempts = 0
-    
-    while (limit is None or count < limit) and attempts < max_attempts:
-        attempts += 1
-        board = chess.Board(None)
-        squares = random.sample(range(64), len(all_pieces))
-        
-        valid_placement = True
-        for i, piece in enumerate(all_pieces):
-            if piece.piece_type == chess.PAWN:
-                r = chess.square_rank(squares[i])
-                if r == 0 or r == 7:
-                    valid_placement = False
-                    break
-            board.set_piece_at(squares[i], piece)
-        
-        if not valid_placement: continue
-        
-        for turn in [chess.WHITE, chess.BLACK]:
-            board.turn = turn
-            if board.is_valid():
-                wdl = tablebase.probe_wdl(board)
-                dtz = tablebase.probe_dtz(board)
-                fens.append(board.fen())
-                wdls.append(wdl)
-                dtzs.append(dtz)
-                count += 1
-                if limit and count >= limit: break
-    
-    tablebase.close()
-    print(f"Collected {len(fens)} positions. Starting GNN feature extraction...")
-    
-    # 2. Parallel extraction
     if workers is None:
         workers = min(cpu_count(), 8)
         
-    num_chunks = (len(fens) + chunk_size - 1) // chunk_size
-    chunks_args = []
-    for i in range(num_chunks):
-        start = i * chunk_size
-        end = min(start + chunk_size, len(fens))
-        chunks_args.append((i, syzygy_path, fens[start:end], wdls[start:end], dtzs[start:end]))
-        
-    all_p_ids = []
-    all_tac = []
-    all_edges = []
-    all_edge_counts = []
-    all_wdl = []
-    all_dtz = []
+    global_start_time = time.time()
+    total_kept = 0
     
-    start_time = time.time()
-    with ProcessPoolExecutor(max_workers=workers) as executor:
-        futures = [executor.submit(process_chunk_gnn, arg) for arg in chunks_args]
-        for future in as_completed(futures):
-            chunk_id, result = future.result()
-            if result:
-                all_p_ids.append(result["p_ids"])
-                all_tac.append(result["tac"])
-                all_edges.append(result["edges"])
-                all_edge_counts.append(result["edge_counts"])
-                all_wdl.append(result["wdl"])
-                all_dtz.append(result["dtz"])
+    for config in configs:
+        print(f"\n[Config: {config}]")
+        white_side, black_side = config.replace('V', 'v').split('v')
+        w_pieces = [chess.Piece(chess.PIECE_SYMBOLS.index(s.lower()), chess.WHITE) for s in white_side]
+        b_pieces = [chess.Piece(chess.PIECE_SYMBOLS.index(s.lower()), chess.BLACK) for s in black_side]
+        all_pieces = w_pieces + b_pieces
+        num_pieces = len(all_pieces)
+        
+        total_items = _perm(64, num_pieces)
+        if limit_per_config:
+            total_items = min(total_items, limit_per_config)
+            
+        num_chunks = (total_items + chunk_size - 1) // chunk_size
+        print(f"Placements to check: {total_items:,} ({num_chunks} chunks)")
+        
+        chunks_args = []
+        for i in range(num_chunks):
+            start = i * chunk_size
+            count = min(chunk_size, total_items - start)
+            chunks_args.append((i, syzygy_path, all_pieces, start, count, canonical, "auto"))
+            
+        config_start_time = time.time()
+        completed = 0
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            # Using map to avoid creating a massive list of futures
+            for idx, result, processed, kept in executor.map(process_chunk_gnn, chunks_args):
+                if result:
+                    shard_manager.add_data(result)
+                    total_kept += kept
                 
-            elapsed = time.time() - start_time
-            print(f"Chunk {chunk_id+1}/{num_chunks} done. Speed: {len(all_p_ids)*chunk_size/elapsed:.0f} pos/s")
+                completed += 1
+                if completed % 10 == 0 or completed == num_chunks:
+                    elapsed = time.time() - config_start_time
+                    speed = (completed * chunk_size) / elapsed if elapsed > 0 else 0
+                    print(f"  Chunk {completed}/{num_chunks} | Progress: {completed/num_chunks*100:.1f}% | Speed: {speed:.0f} pos/s", flush=True)
+        
+        print(f"\nConfig {config} finished. Total kept so far: {total_kept:,}", flush=True)
 
-    # 3. Concatenate and save
-    print("Saving compressed dataset...")
-    np.savez_compressed(
-        output_path,
-        p_ids=np.concatenate(all_p_ids),
-        node_tac=np.concatenate(all_tac),
-        edges=np.concatenate(all_edges),
-        edge_counts=np.concatenate(all_edge_counts),
-        wdl=np.concatenate(all_wdl),
-        dtz=np.concatenate(all_dtz)
-    )
-    print(f"Dataset saved to {output_path}")
+    # Final flush
+    shard_manager.flush()
+    
+    duration = time.time() - global_start_time
+    print(f"\nAll done! Total positions: {total_kept:,} | Total time: {timedelta(seconds=int(duration))}")
+    
+    metadata = {
+        "generated_at": datetime.now().isoformat(),
+        "configs": configs,
+        "total_positions": total_kept,
+        "shard_size": shard_size,
+        "canonical": canonical,
+        "version": "v8_gnn"
+    }
+    with open(os.path.join(output_dir, "dataset_metadata.json"), "w") as f:
+        json.dump(metadata, f, indent=2)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Universal GNN Dataset Generator")
     parser.add_argument("--syzygy", type=str, default="syzygy")
-    parser.add_argument("--config", type=str, default="KRvK")
-    parser.add_argument("--output", type=str, default="data/gnn_smoke_test.npz")
-    parser.add_argument("--limit", type=int, default=10000)
+    parser.add_argument("--output", type=str, default="data/v8")
+    parser.add_argument("--configs", type=str, default="KRvK,KQvK,KPvK", help="Comma separated list of endgames")
+    parser.add_argument("--limit", type=int, default=None, help="Limit per endgame (for smoke tests)")
+    parser.add_argument("--shard_size", type=int, default=4000000)
     parser.add_argument("--workers", type=int, default=None)
+    parser.add_argument("--canonical", action="store_true", default=True)
+    parser.add_argument("--no-canonical", action="store_false", dest="canonical")
     args = parser.parse_args()
     
-    generate_gnn_dataset(args.syzygy, args.output, args.config, limit=args.limit, workers=args.workers)
+    config_list = [c.strip() for c in args.configs.split(',')]
+    
+    generate_gnn_universe(
+        args.syzygy, args.output, config_list, 
+        limit_per_config=args.limit, 
+        workers=args.workers,
+        shard_size=args.shard_size,
+        canonical=args.canonical
+    )

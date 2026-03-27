@@ -1,90 +1,132 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
 
-class GNNLayer(nn.Module):
+class RGNNLayerVectorized(nn.Module):
     """
-    Multi-Channel GNN Layer. 
-    Processes different types of edges (Mobility, Attack, X-Ray) with separate weights.
+    Relational Graph Neural Network Layer (Vectorized Version).
+    Optimized for batch-level parallel processing.
     """
-    def __init__(self, in_features, out_features, num_channels=4):
-        super(GNNLayer, self).__init__()
-        # Separate transforms for each edge channel
-        self.channel_linears = nn.ModuleList([
-            nn.Linear(in_features, out_features) for _ in range(num_channels)
-        ])
-        self.norm = nn.LayerNorm(out_features)
-        self.shortcut = nn.Identity() if in_features == out_features else nn.Linear(in_features, out_features)
+    def __init__(self, in_dim, out_dim, num_relations=16):
+        super().__init__()
+        self.num_relations = num_relations
+        self.in_dim = in_dim
+        self.out_dim = out_dim
         
-    def forward(self, x, adj_channels):
-        """
-        x: [Batch, 64, in_features]
-        adj_channels: [Batch, 64, 64, num_channels]
-        """
-        out = 0
-        for i, linear in enumerate(self.channel_linears):
-            # Aggregation per channel: support = X @ W, then result = Adj @ support
-            support = linear(x) 
-            # Slice the specific channel adjacency matrix
-            channel_adj = adj_channels[:, :, :, i] 
-            out = out + torch.matmul(channel_adj, support)
-        
-        # Residual + Norm
-        return F.relu(self.norm(out + self.shortcut(x)))
+        self.rel_weights = nn.Parameter(torch.randn(num_relations, in_dim, out_dim) * (2.0 / (in_dim + out_dim))**0.5)
+        self.self_weight = nn.Linear(in_dim, out_dim)
+        self.bn = nn.BatchNorm1d(out_dim)
 
-class ChessGNN(nn.Module):
-    """
-    Evolution 8.1 (GNN-Fusion): 
-    Integrates tactical node features and multi-channel edges from Rust engine.
-    """
-    def __init__(self, node_features=32, tactical_features=8, hidden_dim=128, num_layers=4):
-        super(ChessGNN, self).__init__()
-        self.piece_emb = nn.Embedding(13, node_features)
-        self.coord_proj = nn.Linear(2, 8)
+    def forward(self, x, srcs, dsts, etypes, batch_size):
+        # 1. Self propagation
+        out = self.self_weight(x)
         
-        input_dim = node_features + tactical_features + 8
+        # 2. Relation-wise message passing (Vectorized across the whole giant batch graph)
+        for r in range(self.num_relations):
+            mask = (etypes == r)
+            if not mask.any(): continue
+            
+            # Message aggregation using high-speed index_add_
+            # (Works better than expected on Radeon 780M)
+            msgs = x[srcs[mask]] @ self.rel_weights[r]
+            out.index_add_(0, dsts[mask], msgs)
+
+        out = self.bn(out)
+        return F.gelu(out)
+
+class GlobalAttentionPooling(nn.Module):
+    """
+    Learns to attend to the most relevant squares for the evaluation.
+    """
+    def __init__(self, node_dim):
+        super().__init__()
+        self.attention = nn.Sequential(
+            nn.Linear(node_dim, node_dim // 2),
+            nn.GELU(),
+            nn.Linear(node_dim // 2, 1)
+        )
+
+    def forward(self, x, batch_size):
+        scores = self.attention(x) 
+        scores = scores.view(batch_size, 64)
+        weights = F.softmax(scores, dim=1).view(batch_size * 64, 1)
+        
+        weighted_nodes = x * weights
+        weighted_nodes = weighted_nodes.view(batch_size, 64, -1)
+        return torch.sum(weighted_nodes, dim=1)
+
+class ChessGnnV8_Pro(nn.Module):
+    """
+    Ultimate V8 Architecture - Triple Head Version.
+    - WDL: Win/Draw/Loss classification.
+    - DTZ: Distance to Zero (Endgame technicality).
+    - EVAL: Centipawn evaluation (Universal chess intuition).
+    """
+    def __init__(self, node_dim=128, num_layers=4):
+        super().__init__()
+        self.node_dim = node_dim
+        
+        self.piece_embed = nn.Embedding(14, 32)
+        self.init_lin = nn.Linear(32 + 4, node_dim)
         
         self.layers = nn.ModuleList([
-            GNNLayer(input_dim if i == 0 else hidden_dim, hidden_dim, num_channels=4)
-            for i in range(num_layers)
+            RGNNLayerVectorized(node_dim, node_dim) for _ in range(num_layers)
         ])
         
-        self.final_norm = nn.LayerNorm(hidden_dim)
-        self.wdl_head = nn.Linear(hidden_dim * 2, 3)
-        self.dtz_head = nn.Linear(hidden_dim * 2, 1)
+        self.pool = GlobalAttentionPooling(node_dim)
+        
+        # Head 1: WDL (Classification)
+        self.wdl_head = nn.Sequential(
+            nn.Linear(node_dim, node_dim),
+            nn.GELU(),
+            nn.Linear(node_dim, 3)
+        )
+        
+        # Head 2: DTZ (Regression - Endgame depth)
+        self.dtz_head = nn.Sequential(
+            nn.Linear(node_dim, node_dim),
+            nn.GELU(),
+            nn.Linear(node_dim, 1)
+        )
+        
+        # Head 3: EVAL (Regression - Universal Evaluation)
+        self.eval_head = nn.Sequential(
+            nn.Linear(node_dim, node_dim),
+            nn.GELU(),
+            nn.Linear(node_dim, 1)
+        )
 
-    def forward(self, x_piece_ids, x_tactical, adj_channels):
-        """
-        x_piece_ids: [B, 64]
-        x_tactical: [B, 64, 8] (From Rust engine: attack counts, flags, etc.)
-        adj_channels: [B, 64, 64, 4]
-        """
-        batch_size = x_piece_ids.size(0)
-        device = x_piece_ids.device
+    def forward(self, p_ids, node_tac, srcs, dsts, etypes, batch_size):
+        h_piece = self.piece_embed(p_ids)
+        h = torch.cat([h_piece, node_tac], dim=-1)
+        h = F.gelu(self.init_lin(h))
         
-        # 1. Base Node Features
-        h_piece = self.piece_emb(x_piece_ids)
-        
-        # 2. Geometric Features
-        ranks = torch.arange(8, device=device).repeat_interleave(8).float() / 7.0
-        files = torch.arange(8, device=device).repeat(8).float() / 7.0
-        coords = torch.stack([ranks, files], dim=-1).unsqueeze(0).expand(batch_size, -1, -1)
-        h_coord = self.coord_proj(coords)
-        
-        # 3. Concatenate all features (Neural + Tactical + Geo)
-        h = torch.cat([h_piece, x_tactical, h_coord], dim=-1)
-        
-        # 4. Message Passing through Tactical Channels
         for layer in self.layers:
-            h = layer(h, adj_channels)
+            h = h + layer(h, srcs, dsts, etypes, batch_size)
             
-        h = self.final_norm(h)
+        global_features = self.pool(h, batch_size)
         
-        # 5. Global Valuation Pooling
-        pooled = torch.cat([torch.mean(h, dim=1), torch.max(h, dim=1)[0]], dim=-1)
+        wdl = self.wdl_head(global_features)
+        dtz = self.dtz_head(global_features)
+        eval_score = self.eval_head(global_features)
         
-        return self.wdl_head(pooled), self.dtz_head(pooled)
+        return wdl, dtz, eval_score
 
-def get_gnn_model(num_layers=3, hidden_dim=64):
-    return ChessGNN(num_layers=num_layers, hidden_dim=hidden_dim)
+def build_giant_graph(batch_pids, batch_tac, list_srcs, list_dsts, list_etypes):
+    """
+    Offsets piece indices to treat a batch of boards as one giant graph.
+    """
+    B = len(batch_pids)
+    flat_pids = batch_pids.view(-1)
+    flat_tac = batch_tac.view(-1, 4)
+    
+    all_srcs, all_dsts, all_etypes = [], [], []
+    
+    for b in range(B):
+        offset = b * 64
+        all_srcs.append(list_srcs[b] + offset)
+        all_dsts.append(list_dsts[b] + offset)
+        all_etypes.append(list_etypes[b])
+        
+    return (flat_pids, flat_tac, torch.cat(all_srcs), 
+            torch.cat(all_dsts), torch.cat(all_etypes), B)
