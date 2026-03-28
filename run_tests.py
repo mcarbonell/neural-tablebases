@@ -383,10 +383,11 @@ try:
         TestGnnShardDataset,
         TestRustEngine,
     )
+    from tests.test_searcher_v8 import TestGnnSearcher
 
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
-    for cls in [TestBuildGiantGraph, TestChessGnnV8Pro, TestGnnShardDataset, TestRustEngine]:
+    for cls in [TestBuildGiantGraph, TestChessGnnV8Pro, TestGnnShardDataset, TestRustEngine, TestGnnSearcher]:
         suite.addTests(loader.loadTestsFromTestCase(cls))
 
     runner = unittest.TextTestRunner(verbosity=0, stream=open(os.devnull, 'w'))
