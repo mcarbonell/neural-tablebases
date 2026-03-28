@@ -1,9 +1,11 @@
-syzygy/
-logs/
-data/
+/syzygy/
+/logs/
+/data/
+/models/
+/results/
 
+__pycache__/
+*.pyc
+*.pyo
 
-__pycache__
-*.pycvenv_gpu/
-
-venv_gpu/
+/venv_gpu/
