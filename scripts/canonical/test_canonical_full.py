@@ -7,7 +7,7 @@ import sys
 import os
 sys.path.append('src')
 
-from canonical_forms import find_canonical_form, board_to_encoding_key
+from data.canonical_forms import find_canonical_form, board_to_encoding_key
 
 def test_canonical_symmetry():
     """Test that symmetric positions map to the same canonical form."""
@@ -104,7 +104,7 @@ def test_canonical_forms_integration():
     print("\nTesting canonical forms integration...")
     
     # Import the actual encoding function
-    from generate_datasets import encode_board_relative
+    from legacy.generate_datasets import encode_board_relative
     
     # Create a test board
     board = chess.Board()
@@ -117,7 +117,7 @@ def test_canonical_forms_integration():
     # Test encoding function
     def encoding_func(board):
         # Use relative encoding for canonical forms
-        from generate_datasets import encode_board_relative
+        from legacy.generate_datasets import encode_board_relative
         return encode_board_relative(board, use_move_distance=False)
     
     # Get canonical form

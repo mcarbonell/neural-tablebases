@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import sys
 sys.path.insert(0, 'src')
-from models import get_model_for_endgame
+from legacy.models import get_model_for_endgame
 
 print("=" * 70)
 print("ANÁLISIS DETALLADO DEL ENTRENAMIENTO")

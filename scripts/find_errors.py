@@ -4,7 +4,7 @@ import onnxruntime as ort
 import numpy as np
 import os
 import argparse
-from generate_datasets import encode_board
+from legacy.generate_datasets import encode_board
 
 def find_errors(onnx_path, syzygy_path, config="KPvK", encoding_version=5, max_errors=20):
     print(f"Loading ONNX model: {onnx_path}")

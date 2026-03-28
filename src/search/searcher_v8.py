@@ -34,8 +34,8 @@ from typing import List, Dict, Tuple, Optional
 from collections import defaultdict
 
 sys.path.append(os.path.dirname(__file__))
-from models_v8 import ChessGnnV8_Pro, build_giant_graph
-from rust_engine import RustGnnEngine
+from model.models_v8 import ChessGnnV8_Pro, build_giant_graph
+from search.rust_engine import RustGnnEngine
 
 try:
     import torch_directml

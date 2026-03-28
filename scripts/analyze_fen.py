@@ -5,8 +5,8 @@ import numpy as np
 import argparse
 import os
 import time
-from models import get_model_for_endgame
-from generate_datasets import encode_board
+from legacy.models import get_model_for_endgame
+from legacy.generate_datasets import encode_board
 
 class FenAnalyzer:
     def __init__(self, model_path, syzygy_path, device=None):

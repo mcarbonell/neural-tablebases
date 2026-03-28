@@ -1,7 +1,7 @@
 import sys
 import os
 sys.path.append('src')
-from generate_datasets import encode_board
+from legacy.generate_datasets import encode_board
 import chess
 import numpy as np
 

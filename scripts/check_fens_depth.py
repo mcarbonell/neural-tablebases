@@ -4,7 +4,7 @@ import chess.syzygy
 import onnxruntime as ort
 import numpy as np
 import os
-from generate_datasets import encode_board, get_material_config
+from legacy.generate_datasets import encode_board, get_material_config
 
 class NeuralMinimax:
     def __init__(self, onnx_path, syzygy_path, version=5, target_config="KQvKP"):

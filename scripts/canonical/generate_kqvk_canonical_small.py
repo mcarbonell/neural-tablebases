@@ -22,8 +22,8 @@ def main():
     import chess
     import chess.syzygy
     import numpy as np
-    from canonical_forms import find_canonical_form, board_to_encoding_key
-    from generate_datasets import encode_board_relative
+    from data.canonical_forms import find_canonical_form, board_to_encoding_key
+    from legacy.generate_datasets import encode_board_relative
     
     print("Opening Syzygy tablebase...")
     tablebase = chess.syzygy.open_tablebase("syzygy")

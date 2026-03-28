@@ -16,8 +16,8 @@ from collections import defaultdict
 
 # Add src to path for relative imports
 sys.path.append(os.path.dirname(__file__))
-from rust_engine import RustGnnEngine
-from canonical_forms import is_canonical
+from search.rust_engine import RustGnnEngine
+from data.canonical_forms import is_canonical
 
 def _perm(n: int, k: int) -> int:
     """nPk (ordered selections without replacement)."""

@@ -31,7 +31,7 @@ print(board2)
 print(f"FEN: {board2.fen()}")
 
 # Test canonical forms
-from canonical_forms import rotate_board, reflect_board_horizontal, get_all_symmetries
+from data.canonical_forms import rotate_board, reflect_board_horizontal, get_all_symmetries
 
 print("\nTesting rotation...")
 rotated = rotate_board(board1, 1)  # 90°
@@ -57,7 +57,7 @@ def simple_encoding(board):
     return tuple(pieces)
 
 print("\nTesting board_to_encoding_key...")
-from canonical_forms import board_to_encoding_key
+from data.canonical_forms import board_to_encoding_key
 
 key1 = board_to_encoding_key(board1, simple_encoding)
 key2 = board_to_encoding_key(board2, simple_encoding)
@@ -67,7 +67,7 @@ print(f"Key 2: {key2}")
 print(f"Keys equal? {key1 == key2}")
 
 # Test find_canonical_form
-from canonical_forms import find_canonical_form
+from data.canonical_forms import find_canonical_form
 
 print("\nTesting find_canonical_form...")
 canonical1, transform1 = find_canonical_form(board1, simple_encoding)

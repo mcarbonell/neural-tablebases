@@ -2,8 +2,8 @@
 import numpy as np
 import sys
 sys.path.insert(0, 'src')
-from train import TablebaseDataset
-from models import get_model_for_endgame
+from legacy.train import TablebaseDataset
+from legacy.models import get_model_for_endgame
 
 print("=" * 70)
 print("TESTING RELATIVE ENCODING")

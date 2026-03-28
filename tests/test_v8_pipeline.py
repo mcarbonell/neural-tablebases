@@ -53,7 +53,7 @@ class TestBuildGiantGraph(unittest.TestCase):
     """Tests for the vectorized build_giant_graph utility."""
 
     def setUp(self):
-        from models_v8 import build_giant_graph
+        from model.models_v8 import build_giant_graph
         self.build_giant_graph = build_giant_graph
 
     def test_output_shapes_batch2(self):
@@ -94,7 +94,7 @@ class TestChessGnnV8Pro(unittest.TestCase):
     """Smoke tests for the ChessGnnV8_Pro model architecture."""
 
     def setUp(self):
-        from models_v8 import ChessGnnV8_Pro, build_giant_graph
+        from model.models_v8 import ChessGnnV8_Pro, build_giant_graph
         self.ChessGnnV8_Pro = ChessGnnV8_Pro
         self.build_giant_graph = build_giant_graph
 
@@ -167,7 +167,7 @@ class TestGnnShardDataset(unittest.TestCase):
     )
 
     def setUp(self):
-        from train_v8 import GnnShardDataset
+        from train import GnnShardDataset
         self.GnnShardDataset = GnnShardDataset
 
     def test_smoke_shard_loads(self):
@@ -216,7 +216,7 @@ class TestRustEngine(unittest.TestCase):
 
     def setUp(self):
         try:
-            from rust_engine import RustGnnEngine
+            from search.rust_engine import RustGnnEngine
             self.engine = RustGnnEngine()
             self.available = True
         except (FileNotFoundError, ImportError) as e:

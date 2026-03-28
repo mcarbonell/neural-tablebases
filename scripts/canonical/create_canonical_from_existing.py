@@ -7,8 +7,8 @@ import sys
 import os
 sys.path.append('src')
 
-from canonical_forms import find_canonical_form, board_to_encoding_key
-from generate_datasets import encode_board_relative, encode_board
+from data.canonical_forms import find_canonical_form, board_to_encoding_key
+from legacy.generate_datasets import encode_board_relative, encode_board
 
 def main():
     print("Creating canonical dataset from existing KQvK...")

@@ -32,8 +32,8 @@ import time
 import json
 
 sys.path.append(os.path.dirname(__file__))
-from models_v8 import ChessGnnV8_Pro, build_giant_graph
-from rust_engine import RustGnnEngine
+from model.models_v8 import ChessGnnV8_Pro, build_giant_graph
+from search.rust_engine import RustGnnEngine
 
 
 # ──────────────────────────────────────────────────────────────────────────

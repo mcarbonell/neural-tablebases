@@ -1,536 +1,245 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader, Dataset
+import torch.nn.functional as F
 import numpy as np
 import os
 import argparse
 import time
-import json
-import pickle
-from datetime import datetime
-from models import MLP, SIREN, get_model_for_endgame
-from collections import Counter
+import sys
+import glob
+from torch.utils.data import Dataset, DataLoader
+from model.models_v8 import ChessGnnV8_Pro, build_giant_graph
 
-class TablebaseDataset(Dataset):
-    def __init__(self, data_path):
-        print(f"Loading dataset from {data_path}...")
-        data = np.load(data_path)
-        self.x = torch.from_numpy(data['x']).float()
-        
-        # Map WDL to 3 classes: {-2 -> 0, 0 -> 1, 2 -> 2}
-        # Map WDL values to class indices
-        # For 3 classes: -2 → 0 (Loss), 0 → 1 (Draw), 2 → 2 (Win)
-        # For 5 classes: -2 → 0 (Loss), -1 → 1 (Blessed loss), 0 → 2 (Draw), 1 → 3 (Cursed win), 2 → 4 (Win)
-        wdl_raw = data['wdl']
-        
-        # Detect if we have 5-class data (contains -1 or 1)
-        unique_wdl = np.unique(wdl_raw)
-        has_cursed_blessed = np.any(np.isin(unique_wdl, [-1, 1]))
-        
-        if has_cursed_blessed:
-            # 5-class mapping
-            wdl_mapped = np.zeros_like(wdl_raw)
-            wdl_mapped[wdl_raw == -2] = 0  # Loss
-            wdl_mapped[wdl_raw == -1] = 1  # Blessed loss
-            wdl_mapped[wdl_raw == 0] = 2   # Draw
-            wdl_mapped[wdl_raw == 1] = 3   # Cursed win
-            wdl_mapped[wdl_raw == 2] = 4   # Win
-            self.num_wdl_classes = 5
-        else:
-            # 3-class mapping (standard)
-            wdl_mapped = np.zeros_like(wdl_raw)
-            wdl_mapped[wdl_raw == -2] = 0  # Loss
-            wdl_mapped[wdl_raw == 0] = 1   # Draw
-            wdl_mapped[wdl_raw == 2] = 2   # Win
-            self.num_wdl_classes = 3
-        
-        self.wdl = torch.from_numpy(wdl_mapped).long()
-        self.dtz = torch.from_numpy(data['dtz']).float()
-        
-        # Store input size for model initialization
-        self.input_size = self.x.shape[1]
-        
-        # Detect encoding type
-        # Relative encoding v1: 43 dims for 3 pieces, 65 for 4, 91 for 5
-        # Relative encoding v2 (old): 46 dims for 3 pieces, 71 for 4, 101 for 5
-        # Relative encoding v2 (fixed): 64 dims for 3 pieces, 107 for 4, 161 for 5
-        # Compact encoding: 192 dims for 3 pieces, 256 for 4, 320 for 5
-        if self.input_size == 43:
-            self.num_pieces = 3
-            self.use_relative_encoding = True
-            self.encoding_version = 1
-        elif self.input_size == 45:
-            self.num_pieces = 3
-            self.use_relative_encoding = True
-            self.encoding_version = 4
-        elif self.input_size == 46:
-            self.num_pieces = 3
-            self.use_relative_encoding = True
-            self.encoding_version = 2  # Old v2
-        elif self.input_size == 64:
-            self.num_pieces = 3
-            self.use_relative_encoding = True
-            self.encoding_version = 3  # Fixed v2 (v2.1)
-        elif self.input_size == 65:
-            self.num_pieces = 4
-            self.use_relative_encoding = True
-            self.encoding_version = 1
-        elif self.input_size == 68:
-            self.num_pieces = 4
-            self.use_relative_encoding = True
-            self.encoding_version = 4
-        elif self.input_size == 71:
-            self.num_pieces = 4
-            self.use_relative_encoding = True
-            self.encoding_version = 2  # Old v2
-        elif self.input_size == 107:
-            self.num_pieces = 4
-            self.use_relative_encoding = True
-            self.encoding_version = 3  # Fixed v2 (v2.1)
-        elif self.input_size == 91:
-            self.num_pieces = 5
-            self.use_relative_encoding = True
-            self.encoding_version = 1
-        elif self.input_size == 95:
-            self.num_pieces = 5
-            self.use_relative_encoding = True
-            self.encoding_version = 4
-        elif self.input_size == 57:
-            self.num_pieces = 3
-            self.use_relative_encoding = True
-            self.encoding_version = 6
-        elif self.input_size == 84:
-            self.num_pieces = 4
-            self.use_relative_encoding = True
-            self.encoding_version = 6
-        elif self.input_size == 115:
-            self.num_pieces = 5
-            self.use_relative_encoding = True
-            self.encoding_version = 6
-        elif self.input_size == 101:
-            self.num_pieces = 5
-            self.use_relative_encoding = True
-            self.encoding_version = 2  # Old v2
-        elif self.input_size == 161:
-            self.num_pieces = 5
-            self.use_relative_encoding = True
-            self.encoding_version = 3  # Fixed v2 (v2.1)
-        else:
-            # Compact encoding: num_pieces * 64
-            self.num_pieces = self.input_size // 64
-            self.use_relative_encoding = False
-            self.encoding_version = 0
-        
-        # Calculate class weights for balanced training
-        unique, counts = np.unique(wdl_mapped, return_counts=True)
-        total = len(wdl_mapped)
-        self.class_weights = torch.FloatTensor([total / (len(unique) * c) for c in counts])
-        
-        encoding_type = f"relative/geometric v{self.encoding_version}" if self.use_relative_encoding else "compact one-hot"
-        print(f"Dataset loaded: {len(self.x)} positions.")
-        print(f"Input size: {self.input_size} ({self.num_pieces} pieces, {encoding_type} encoding)")
-        
-        if self.num_wdl_classes == 5:
-            print(f"WDL distribution (5 classes): Loss={counts[0]}, Blessed={counts[1] if len(counts) > 1 else 0}, "
-                  f"Draw={counts[2] if len(counts) > 2 else 0}, Cursed={counts[3] if len(counts) > 3 else 0}, "
-                  f"Win={counts[4] if len(counts) > 4 else 0}")
-        else:
-            print(f"WDL distribution (3 classes): Loss={counts[0]}, Draw={counts[1] if len(counts) > 1 else 0}, "
-                  f"Win={counts[2] if len(counts) > 2 else 0}")
-        
-        print(f"Class weights: {self.class_weights.numpy()}")
+# Try to import DirectML for AMD
+try:
+    import torch_directml
+    HAS_DIRECTML = True
+except ImportError:
+    HAS_DIRECTML = False
 
+def setup_logger(model_name):
+    """Sets up mandatory project logging as per GEMINI.md rules."""
+    os.makedirs("data/logs", exist_ok=True)
+    log_path = os.path.join("data/logs", f"train_{model_name}.log")
+    
+    # Save the exact command used to launch
+    cmd_string = " ".join(sys.argv)
+    header = f"LAUNCH COMMAND: python {cmd_string}\n"
+    header += "="*50 + "\n"
+    
+    # Check if we append or start new
+    mode = "a" if os.path.exists(log_path) else "w"
+    with open(log_path, mode) as f:
+        f.write(header if mode == "w" else f"\n\nRESUMING: {header}")
+        
+    def log_print(msg):
+        print(msg)
+        with open(log_path, "a") as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} | {msg}\n")
+    
+    return log_print
+
+class GnnShardDataset(Dataset):
+    def __init__(self, npz_path):
+        data = np.load(npz_path)
+        self.p_ids = data['p_ids']
+        self.node_tac = data['node_tac']
+        self.edges = data['edges']
+        self.edge_counts = data['edge_counts']
+        self.wdl_raw = data['wdl']
+        self.dtz_raw = data['dtz']
+        
+        # Detect if we have Lichess-style evals (0..2) vs Tablebase (-2..2)
+        self.is_lichess = np.max(self.wdl_raw) <= 2 and np.min(self.wdl_raw) >= 0
+        
     def __len__(self):
-        return len(self.x)
-
+        return len(self.p_ids)
+    
     def __getitem__(self, idx):
-        return self.x[idx], self.wdl[idx], self.dtz[idx]
-def train(args):
-    # Support for AMD GPUs via DirectML on Windows
-    # If CUDA is available, use it (standard for NVIDIA)
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-    else:
-        try:
-            # Try to use torch_directml if available
-            import torch_directml
-            device = torch_directml.device()
-            # Verify it's actually working (sometimes it fails silently)
-            _ = torch.tensor([1.0], device=device)
-            print(f"Using AMD GPU/RPU via DirectML: {device}")
-        except (ImportError, Exception):
-            # Fallback to CPU
-            device = torch.device("cpu")
-            print("DirectML not available or failed. Using CPU.")
-    
-    print(f"Final training device: {device}")
-    
-    # Create logs directory
-    os.makedirs("logs", exist_ok=True)
-    log_file = os.path.join("logs", f"train_{args.model}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
-    
-    def log(message):
-        print(message)
-        with open(log_file, "a") as f:
-            f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {message}\n")
-
-    log(f"Starting training session: {args.model}")
-    log(f"Args: {args}")
-
-    dataset = TablebaseDataset(args.data_path)
-
-    # Optional dataset metadata (generated by dataset generators)
-    dataset_metadata = None
-    meta_json = args.data_path.replace(".npz", "_metadata.json")
-    meta_pkl = args.data_path.replace(".npz", "_metadata.pkl")
-    try:
-        if os.path.exists(meta_json):
-            with open(meta_json, "r", encoding="utf-8") as f:
-                dataset_metadata = json.load(f)
-        elif os.path.exists(meta_pkl):
-            with open(meta_pkl, "rb") as f:
-                dataset_metadata = pickle.load(f)
-    except Exception as e:
-        log(f"WARNING: failed to load dataset metadata: {e}")
-        dataset_metadata = None
-
-    def _json_safe(obj):
-        if isinstance(obj, (np.integer, np.floating)):
-            return obj.item()
-        if isinstance(obj, (list, tuple)):
-            return [_json_safe(x) for x in obj]
-        if isinstance(obj, dict):
-            return {str(k): _json_safe(v) for k, v in obj.items()}
-        return obj
-
-    # Base metadata for any checkpoints we save
-    base_metadata = {
-        "saved_from": "src/train.py",
-        "data_path": args.data_path,
-        "args": vars(args),
-        "dataset": {
-            "num_samples": len(dataset),
-            "input_size": int(dataset.input_size),
-            "num_pieces": int(dataset.num_pieces),
-            "use_relative_encoding": bool(dataset.use_relative_encoding),
-            "encoding_version": int(dataset.encoding_version),
-            "num_wdl_classes": int(getattr(dataset, "num_wdl_classes", args.wdl_classes)),
-        },
-        "dataset_metadata": _json_safe(dataset_metadata) if dataset_metadata is not None else None,
-    }
-
-    def write_checkpoint_metadata(model_path: str, extra: dict):
-        meta = dict(base_metadata)
-        meta.update(extra)
-        meta["saved_at"] = datetime.now().isoformat()
-        meta_path = model_path.replace(".pth", "_metadata.json")
-        try:
-            with open(meta_path, "w", encoding="utf-8") as f:
-                json.dump(meta, f, indent=2, sort_keys=True)
-        except Exception as e:
-            log(f"WARNING: failed to write model metadata to {meta_path}: {e}")
-
-    train_size = int(0.9 * len(dataset))
-    val_size = len(dataset) - train_size
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
-
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, 
-                              num_workers=4, pin_memory=True)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, 
-                            num_workers=4, pin_memory=True)
-
-    # Use adaptive model based on endgame complexity
-    # Use dataset's detected WDL classes if available, otherwise use args
-    num_wdl_classes = getattr(dataset, 'num_wdl_classes', args.wdl_classes)
-    model = get_model_for_endgame(args.model, dataset.num_pieces, num_wdl_classes=num_wdl_classes, 
-                                   use_relative_encoding=dataset.use_relative_encoding,
-                                   input_size=dataset.input_size).to(device)
-    
-    # Load weights if provided (Transfer Learning)
-    if args.load_path and os.path.exists(args.load_path):
-        log(f"Loading weights from {args.load_path} for Transfer Learning...")
-        try:
-            state_dict = torch.load(args.load_path, map_location=device)
-            # Filter matches only to avoid strict size errors if architecture slightly differs
-            model.load_state_dict(state_dict, strict=True)
-            log("Weights loaded successfully.")
+        count = int(self.edge_counts[idx])
+        raw_edges = self.edges[idx][:count]
+        
+        e_types = (raw_edges >> 12) & 0xF
+        srcs = (raw_edges >> 6) & 0x3F
+        dsts = raw_edges & 0x3F
+        
+        # Mapping WDL correctly
+        wdl_val = self.wdl_raw[idx]
+        if not self.is_lichess:
+            wdl_mapped = np.sign(wdl_val).astype(np.int64) + 1
+        else:
+            wdl_mapped = wdl_val.astype(np.int64)
             
-            # Metadata check
-            meta_path = args.load_path.replace(".pth", "_metadata.json")
-            if os.path.exists(meta_path):
-                with open(meta_path, "r") as f:
-                    meta = json.load(f)
-                    log(f"Model Source: {meta.get('data_path')} (Epoch {meta.get('epoch')}, Acc {meta.get('best_val_acc')})")
-        except Exception as e:
-            log(f"WARNING: could not load weights from {args.load_path}: {e}")
-            log("Starting from scratch.")
-    
-    log(f"Model architecture: {model}")
-    log(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
+        dtz_val = self.dtz_raw[idx]
+        eval_score = dtz_val if self.is_lichess else 0.0
+        dtz_score = 0.0 if self.is_lichess else abs(dtz_val)
+        
+        return {
+            "p_ids": torch.from_numpy(self.p_ids[idx].astype(np.int64)),
+            "node_tac": torch.from_numpy(self.node_tac[idx].astype(np.float32)) / 8.0,
+            "srcs": torch.from_numpy(srcs.astype(np.int64)),
+            "dsts": torch.from_numpy(dsts.astype(np.int64)),
+            "e_types": torch.from_numpy(e_types.astype(np.int64)),
+            "wdl": torch.tensor(wdl_mapped, dtype=torch.long),
+            "dtz": torch.tensor(dtz_score, dtype=torch.float32),
+            "eval": torch.tensor(eval_score, dtype=torch.float32)
+        }
 
-    # Use class weights from dataset for imbalanced classes
-    class_weights = dataset.class_weights.to(device)
-    log(f"Class weights: {class_weights.cpu().numpy()}")
+def collate_vectorized(batch):
+    B = len(batch)
+    batch_pids = torch.stack([b["p_ids"] for b in batch])
+    batch_tac = torch.stack([b["node_tac"] for b in batch])
+    batch_wdl = torch.stack([b["wdl"] for b in batch])
+    batch_dtz = torch.stack([b["dtz"] for b in batch])
+    batch_eval = torch.stack([b["eval"] for b in batch])
     
-    # CrossEntropy with class weights and reduction='none' for hard example weighting
-    criterion_wdl = nn.CrossEntropyLoss(weight=class_weights, reduction='none')
-    criterion_dtz = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5, foreach=False)
+    list_srcs = [b["srcs"] for b in batch]
+    list_dsts = [b["dsts"] for b in batch]
+    list_etypes = [b["e_types"] for b in batch]
     
-    # Scheduler: More conservative ReduceLROnPlateau
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, 'max', patience=20, factor=0.7, min_lr=1e-5
+    flat_pids, flat_tac, g_srcs, g_dsts, g_etypes, _ = build_giant_graph(
+        batch_pids, batch_tac, list_srcs, list_dsts, list_etypes
     )
-
-    best_val_acc = 0.0
-    best_val_loss = float('inf')
-    best_dtz_mae = float('inf')
-    best_model_state = None
-    patience_counter = 0
     
-    # Overfitting Loop: Track hard examples
-    hard_examples = []
-    hard_example_weight = args.hard_weight  # Weight for hard examples
-    hard_examples_count = 0  # Track total hard examples found
+    return flat_pids, flat_tac, g_srcs, g_dsts, g_etypes, B, batch_wdl, batch_dtz, batch_eval
+
+def train_v8():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data_dir", type=str, default="data/v8_shards")
+    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--batch_size", type=int, default=1024)
+    parser.add_argument("--lr", type=float, default=0.001)
+    parser.add_argument("--model_name", type=str, default="v8_pro_triple_head")
+    args = parser.parse_args()
+    
+    log = setup_logger(args.model_name)
+    
+    if HAS_DIRECTML and torch_directml.is_available():
+        device = torch_directml.device()
+        log(f"Using DirectML (Radeon 780M) Acceleration.")
+    else:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        log(f"Using device: {device}")
+        
+    model = ChessGnnV8_Pro(node_dim=128, num_layers=4).to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    
+    # Add Cosine Annealing Scheduler for smooth convergence
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=args.lr * 0.1)
+
+    # Rule 4.4: Load latest checkpoint if available
+    checkpoint_path = f"data/{args.model_name}_latest.pth"
+    if os.path.exists(checkpoint_path):
+        log(f"Loading weights from existing checkpoint: {checkpoint_path}")
+        model.load_state_dict(torch.load(checkpoint_path, map_location=device, weights_only=False))
+    
+    log(f"Starting GNN-V8-Pro Triple Head Training: {args.model_name}")
+    log(f"Model Parameters: {sum(p.numel() for p in model.parameters()):,}")
+
+    # H1-A: Track best model across epochs
+    best_wdl_acc = 0.0
+    best_path = f"data/{args.model_name}_best.pth"
 
     for epoch in range(args.epochs):
-        epoch_start_time = time.time()
         model.train()
-        total_loss = 0
-        correct_wdl = 0
-        total_dtz_mae = 0
-        total_dtz_samples = 0
-        epoch_hard_examples = 0
+        cur_lr = optimizer.param_groups[0]['lr']
+        log(f"Epoch {epoch+1} starting. Current LR: {cur_lr:.6f}")
         
-        for batch_idx, (x, wdl, dtz) in enumerate(train_loader):
-            x, wdl, dtz = x.to(device), wdl.to(device), dtz.to(device)
-            
-            # --- Vectorized GPU Augmentation for V4 Encoding ---
-            if getattr(dataset, 'encoding_version', 0) == 4:
-                flip_mask = torch.rand(x.shape[0], device=device) > 0.5
-                if flip_mask.any():
-                    num_pieces = dataset.num_pieces
-                    # 1. Flip piece columns (1 - col)
-                    for i in range(num_pieces):
-                        col_idx = i * 11 + 1
-                        x[flip_mask, col_idx] = 1.0 - x[flip_mask, col_idx]
-                        
-                    # 2. Flip pair dx (-dx)
-                    start_pairs = num_pieces * 11
-                    num_pairs = (num_pieces * (num_pieces - 1)) // 2
-                    for i in range(num_pairs):
-                        dx_idx = start_pairs + (i * 4) + 2
-                        x[flip_mask, dx_idx] = -x[flip_mask, dx_idx]
-            # ---------------------------------------------------
-
-            optimizer.zero_grad()
-            wdl_logits, dtz_pred = model(x)
-            
-            loss_wdl = criterion_wdl(wdl_logits, wdl)
-            
-            # Less aggressive Hard Example Mining
-            with torch.no_grad():
-                predictions = wdl_logits.argmax(1)
-                is_wrong = (predictions != wdl).float()
-                
-                # Reduced dynamic weighting: max 2x instead of 3x
-                epoch_factor = min(epoch / 100.0, 2.0)  # Max 2x weight increase, slower ramp
-                weights = is_wrong * (hard_example_weight * (1 + epoch_factor)) + 1.0
-                
-                # Track hard examples less frequently
-                if args.hard_mining and batch_idx % 20 == 0:  # Every 20 batches instead of 10
-                    wrong_indices = torch.where(is_wrong == 1)[0]
-                    epoch_hard_examples += len(wrong_indices)
-                    for idx in wrong_indices:
-                        hard_examples.append({
-                            'x': x[idx].cpu(),
-                            'wdl': wdl[idx].cpu(),
-                            'dtz': dtz[idx].cpu()
-                        })
-            
-            # Combined loss: WDL + DTZ (increased DTZ weight)
-            loss_dtz = criterion_dtz(dtz_pred.squeeze(), dtz.float())
-            loss = (loss_wdl * weights).mean() + 0.5 * loss_dtz
-            
-            # Track DTZ metrics
-            with torch.no_grad():
-                dtz_mae = torch.abs(dtz_pred.squeeze() - dtz.float()).mean()
-                total_dtz_mae += dtz_mae.item() * len(dtz)
-                total_dtz_samples += len(dtz)
-            
-            loss.backward()
-            # Gradient clipping for stability
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
-            
-            total_loss += loss.item()
-            correct_wdl += (wdl_logits.argmax(1) == wdl).sum().item()
+        # Init metrics
+        total_correct_wdl = 0
+        total_mae_dtz = 0
+        total_mae_eval = 0
+        total_pos = 0
+        total_samples_dtz = 0
+        total_samples_eval = 0
         
-        hard_examples_count += epoch_hard_examples
-
-        # Validation
-        model.eval()
-        val_correct = 0
-        val_loss = 0
-        val_dtz_mae = 0
-        val_dtz_samples = 0
-        with torch.no_grad():
-            for x, wdl, dtz in val_loader:
-                x, wdl, dtz = x.to(device), wdl.to(device), dtz.to(device)
-                wdl_logits, dtz_pred = model(x)
-                val_correct += (wdl_logits.argmax(1) == wdl).sum().item()
-                val_loss += criterion_wdl(wdl_logits, wdl).mean().item()
-                
-                # Track DTZ metrics
-                dtz_mae = torch.abs(dtz_pred.squeeze() - dtz.float()).mean()
-                val_dtz_mae += dtz_mae.item() * len(dtz)
-                val_dtz_samples += len(dtz)
-
-        val_acc = val_correct / val_size
-        val_loss_avg = val_loss / len(val_loader)
-        train_dtz_mae = total_dtz_mae / total_dtz_samples
-        val_dtz_mae_avg = val_dtz_mae / val_dtz_samples
-        epoch_duration = time.time() - epoch_start_time
-        
-        log(f"Epoch {epoch+1}/{args.epochs} - Time: {epoch_duration:.2f}s - "
-            f"Train Loss: {total_loss/len(train_loader):.4f} - Val Loss: {val_loss_avg:.4f} - "
-            f"Train Acc: {correct_wdl/train_size:.4f} - Val Acc: {val_acc:.4f} - "
-            f"Train DTZ MAE: {train_dtz_mae:.2f} - Val DTZ MAE: {val_dtz_mae_avg:.2f} - "
-            f"LR: {optimizer.param_groups[0]['lr']:.6f} - Hard Examples: {epoch_hard_examples}")
-
-        # Save Best Model (based on val_loss for better generalization)
-        if val_loss_avg < best_val_loss:
-            best_val_loss = val_loss_avg
-            best_val_acc = val_acc
-            best_dtz_mae = val_dtz_mae_avg
-            best_model_state = model.state_dict().copy()
-            model_base = args.model_name if args.model_name else args.model
-            save_path = os.path.join("data", f"{model_base}_best.pth")
-            torch.save(model.state_dict(), save_path)
-            write_checkpoint_metadata(save_path, {
-                "checkpoint": "best",
-                "epoch": int(epoch + 1),
-                "val_loss": float(val_loss_avg),
-                "val_acc": float(val_acc),
-                "val_dtz_mae": float(val_dtz_mae_avg),
-            })
-            log(f"New best validation loss! Val Loss: {val_loss_avg:.4f}, Val Acc: {val_acc:.4f}. Model saved to {save_path}")
-            patience_counter = 0
-        else:
-            patience_counter += 1
-
-        # Early stopping
-        if patience_counter >= args.patience:
-            log(f"Early stopping triggered after {patience_counter} epochs without improvement")
-            break
-
-        # Periodic checkpoint
-        if (epoch + 1) % 100 == 0:
-            model_base = args.model_name if args.model_name else args.model
-            ckpt_path = os.path.join("data", f"{model_base}_checkpoint_e{epoch+1}.pth")
-            torch.save(model.state_dict(), ckpt_path)
-            write_checkpoint_metadata(ckpt_path, {
-                "checkpoint": "checkpoint",
-                "epoch": int(epoch + 1),
-                "val_loss": float(val_loss_avg),
-                "val_acc": float(val_acc),
-                "val_dtz_mae": float(val_dtz_mae_avg),
-            })
-        
-        # Update scheduler
-        scheduler.step(val_acc)
-        
-        # Overfitting Loop: Re-train on hard examples every N epochs
-        if args.hard_mining and (epoch + 1) % args.hard_mining_freq == 0 and len(hard_examples) > 0:
-            log(f"Overfitting Loop: Re-training on {len(hard_examples)} hard examples...")
-            model.train()
+        # Refresh and shuffle shards each epoch to include newly generated data
+        shards = sorted(glob.glob(os.path.join(args.data_dir, "*.npz")))
+        if not shards:
+            log(f"WARNING: No shards found in {args.data_dir} at Epoch {epoch+1}")
+            time.sleep(30)
+            continue
             
-            # Use same batch size as main training for the hard examples
-            # This avoids huge memory spikes on GPUs like Radeon 780M
-            try:
-                # 1. Stack tensors (still on CPU to preserve VRAM until needed)
-                hard_x_all = torch.stack([ex['x'] for ex in hard_examples])
-                hard_wdl_all = torch.stack([ex['wdl'] for ex in hard_examples])
-                hard_dtz_all = torch.stack([ex['dtz'] for ex in hard_examples])
+        np.random.shuffle(shards)
+        log(f"Epoch {epoch+1} starting with {len(shards)} shards.")
+        
+        last_acc = 0
+        last_mae_eval = 0
+        
+        for s_idx, shard_path in enumerate(shards):
+            ds = GnnShardDataset(shard_path)
+            loader = DataLoader(ds, batch_size=args.batch_size, shuffle=True, 
+                              collate_fn=collate_vectorized, num_workers=2)
+            
+            start_shard = time.time()
+            shard_pos = 0 # Track pos in current shard for speed
+            
+            for batch_idx, (p_ids, tac, srcs, dsts, etypes, B, wdl, dtz, ev) in enumerate(loader):
+                p_ids, tac = p_ids.to(device), tac.to(device)
+                srcs, dsts, etypes = srcs.to(device), dsts.to(device), etypes.to(device)
+                wdl, dtz, ev = wdl.to(device), dtz.to(device), ev.to(device)
                 
-                # 2. Create a temporary DataLoader for hard examples
-                from torch.utils.data import TensorDataset
-                hard_dataset = TensorDataset(hard_x_all, hard_wdl_all, hard_dtz_all)
-                hard_loader = DataLoader(hard_dataset, batch_size=args.batch_size, shuffle=True)
+                optimizer.zero_grad()
+                out_wdl, out_dtz, out_eval = model(p_ids, tac, srcs, dsts, etypes, B)
                 
-                # 3. Train on hard examples
-                for hard_epoch in range(args.hard_mining_epochs):
-                    hard_epoch_loss = 0
-                    for hx, hwdl, hdtz in hard_loader:
-                        hx, hwdl = hx.to(device), hwdl.to(device)
-                        hdtz = hdtz.to(device)
-                        
-                        optimizer.zero_grad()
-                        hwdl_logits, hdtz_pred = model(hx)
-                        
-                        loss = criterion_wdl(hwdl_logits, hwdl).mean() + 0.5 * criterion_dtz(hdtz_pred.squeeze(), hdtz.float())
-                        loss.backward()
-                        
-                        # Apply same clipping as standard training
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                        optimizer.step()
-                        hard_epoch_loss += loss.item()
+                # Triple Loss Calculation
+                loss_wdl = F.cross_entropy(out_wdl, wdl)
+                loss_dtz = F.mse_loss(out_dtz.squeeze(), dtz) if not ds.is_lichess else torch.tensor(0.0, device=device)
+                loss_eval = F.mse_loss(out_eval.squeeze(), ev) if ds.is_lichess else torch.tensor(0.0, device=device)
+                
+                # Weighted Loss
+                loss = loss_wdl + 0.1 * loss_dtz + 1.0 * loss_eval
+                
+                loss.backward()
+                optimizer.step()
+                
+                # Metrics Calculation
+                _, pred_wdl = out_wdl.max(1)
+                total_correct_wdl += pred_wdl.eq(wdl).sum().item()
+                
+                if not ds.is_lichess:
+                    total_mae_dtz += F.l1_loss(out_dtz.squeeze(), dtz).item() * B
+                    total_samples_dtz += B
+                else:
+                    total_mae_eval += F.l1_loss(out_eval.squeeze(), ev).item() * B
+                    total_samples_eval += B
+                
+                total_pos += B
+                shard_pos += B
+                
+                if batch_idx % 100 == 0:
+                    speed = shard_pos / (time.time() - start_shard + 1e-6)
+                    cur_acc = total_correct_wdl / total_pos * 100
+                    cur_mae_eval = total_mae_eval / (total_samples_eval + 1e-6)
                     
-                    # log(f"  Hard Epoch {hard_epoch+1}/{args.hard_mining_epochs} - Avg Loss: {hard_epoch_loss/len(hard_loader):.4f}")
-                
-            except Exception as e:
-                log(f"ERROR during Overfitting Loop: {e}")
-            finally:
-                # 4. Clear memory immediately
-                hard_examples = []
-                # If using DirectML or shared memory, try to hint at GC
-                if 'hx' in locals(): del hx
-                if 'hwdl' in locals(): del hwdl
-                if 'hdtz' in locals(): del hdtz
-                import gc
-                gc.collect()
-                log(f"Overfitting Loop completed and memory cleared")
+                    # Calculate Deltas
+                    delta_acc = cur_acc - last_acc if last_acc > 0 else 0
+                    delta_mae = cur_mae_eval - last_mae_eval if last_mae_eval > 0 else 0
+                    
+                    acc_str = f"{cur_acc:.2f}% ({delta_acc:+.2f}%)"
+                    mae_str = f"{cur_mae_eval:.4f} ({delta_mae:+.4f})"
+                    
+                    log(f"E{epoch+1} | S{s_idx+1}/{len(shards)} | B{batch_idx} | "
+                        f"L:{loss.item():.4f} | WDL-Acc:{acc_str} | "
+                        f"Eval-MAE:{mae_str} | "
+                        f"Spd:{speed:.1f} pos/s")
+                    
+                    last_acc = cur_acc
+                    last_mae_eval = cur_mae_eval
 
-    # Save Final Model
-    model_base = args.model_name if args.model_name else args.model
-    save_path = os.path.join("data", f"{model_base}_final.pth")
-    torch.save(model.state_dict(), save_path)
-    write_checkpoint_metadata(save_path, {
-        "checkpoint": "final",
-        "epoch": int(epoch + 1),
-        "best_val_acc": float(best_val_acc),
-        "best_val_loss": float(best_val_loss),
-        "best_val_dtz_mae": float(best_dtz_mae),
-    })
-    log(f"Final model saved to {save_path}")
-    log(f"Total hard examples processed: {hard_examples_count}")
-    log(f"Best validation accuracy: {best_val_acc:.4f}")
-    log(f"Best validation loss: {best_val_loss:.4f}")
-    log(f"Best validation DTZ MAE: {best_dtz_mae:.2f}")
+            torch.save(model.state_dict(), f"data/{args.model_name}_latest.pth")
+
+        # H1-A: Save best model checkpoint
+        epoch_acc = total_correct_wdl / max(total_pos, 1) * 100
+        if epoch_acc > best_wdl_acc:
+            best_wdl_acc = epoch_acc
+            torch.save(model.state_dict(), best_path)
+            log(f"★ NEW BEST saved: {best_path} | WDL-Acc: {best_wdl_acc:.2f}%")
+
+        log(f"Epoch {epoch+1} complete. WDL-Acc: {epoch_acc:.2f}% | Best: {best_wdl_acc:.2f}%")
+
+        # Rule 4.5: Update LR
+        scheduler.step()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data_path", type=str, required=True)
-    parser.add_argument("--model", type=str, choices=["mlp", "siren"], default="mlp")
-    parser.add_argument("--epochs", type=int, default=1000)
-    parser.add_argument("--batch_size", type=int, default=4096)
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--patience", type=int, default=50,
-                        help="Early stopping patience (epochs without improvement)")
-    parser.add_argument("--wdl_classes", type=int, default=3, choices=[3, 5],
-                        help="Number of WDL classes: 3 (standard) or 5 (with cursed/blessed)")
-    parser.add_argument("--hard_weight", type=float, default=2.0,
-                        help="Weight multiplier for hard examples (reduced from 5.0)")
-    parser.add_argument("--hard_mining", action="store_true", default=True,
-                        help="Enable hard example mining")
-    parser.add_argument("--hard_mining_freq", type=int, default=50,
-                        help="Frequency of hard example re-training (epochs, increased from 10)")
-    parser.add_argument("--hard_mining_epochs", type=int, default=3,
-                        help="Number of epochs to train on hard examples (reduced from 5)")
-    parser.add_argument("--model_name", type=str, default=None,
-                        help="Custom name for the model file (defaults to model type)")
-    parser.add_argument("--load_path", type=str, default=None,
-                        help="Load weights from this checkpoint for transfer learning")
-    args = parser.parse_args()
-    train(args)
+    train_v8()

@@ -6,7 +6,7 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
-from generate_datasets_parallel import generate_dataset_parallel
+from legacy.generate_datasets_parallel import generate_dataset_parallel
 import time
 
 def test_parallel():

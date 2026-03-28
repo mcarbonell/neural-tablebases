@@ -7,8 +7,8 @@ import json
 import argparse
 import time
 from typing import List, Tuple, Dict, Optional
-from models import get_model_for_endgame
-from generate_datasets import encode_board, flip_board
+from legacy.models import get_model_for_endgame
+from legacy.generate_datasets import encode_board, flip_board
 
 class NeuralSearcher:
     def __init__(self, model_path: str, syzygy_path: str, device: str = None):
@@ -126,7 +126,7 @@ class NeuralSearcher:
             out = flip_board(out)
 
         if self.canonical:
-            from canonical_forms import find_canonical_form
+            from data.canonical_forms import find_canonical_form
             out, _ = find_canonical_form(out, lambda b: (), mode=self.canonical_mode)
 
         return out

@@ -3,7 +3,7 @@ import chess
 import numpy as np
 import sys
 sys.path.append('src')
-from generate_datasets import encode_board_relative, piece_move_distance
+from legacy.generate_datasets import encode_board_relative, piece_move_distance
 
 # Test piece_move_distance function
 print("=" * 70)

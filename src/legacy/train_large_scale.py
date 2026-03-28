@@ -7,7 +7,7 @@ import os
 import json
 import argparse
 import time
-from models import get_model_for_endgame
+from legacy.models import get_model_for_endgame
 from datetime import datetime
 
 class StreamingShardedDataset(Dataset):

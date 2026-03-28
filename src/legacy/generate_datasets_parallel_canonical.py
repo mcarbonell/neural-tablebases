@@ -10,7 +10,7 @@ Use this wrapper if you have existing scripts referencing it.
 
 import argparse
 
-from generate_datasets_parallel import generate_dataset_parallel
+from legacy.generate_datasets_parallel import generate_dataset_parallel
 
 
 def main() -> None:

@@ -22,7 +22,7 @@ class DTZNeuralMinimax:
         self.target_config = target_config
         
     def encode_board(self, board: chess.Board) -> np.ndarray:
-        from generate_datasets import encode_board
+        from legacy.generate_datasets import encode_board
         # v5 is the current universal architecture standard
         enc = encode_board(board, relative="v5")
         # Pad up to 68 for 3-piece captures evaluated by a 4-piece Universal Model

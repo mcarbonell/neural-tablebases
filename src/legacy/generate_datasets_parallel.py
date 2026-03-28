@@ -27,7 +27,7 @@ import shutil
 
 # Import encoding functions from original script
 sys.path.append(os.path.dirname(__file__))
-from generate_datasets import encode_board, piece_move_distance, encode_board_relative
+from legacy.generate_datasets import encode_board, piece_move_distance, encode_board_relative
 
 EnumerationMode = Literal["permutation", "combination"]
 
@@ -210,7 +210,7 @@ def process_chunk(args):
 
         if canonical:
             try:
-                from canonical_forms import is_canonical, find_canonical_form, board_to_canonical_key
+                from data.canonical_forms import is_canonical, find_canonical_form, board_to_canonical_key
             except ImportError:
                 print("Warning: canonical_forms module not found. Canonical forms disabled.")
                 canonical_filter = False

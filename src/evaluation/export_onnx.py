@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from models import MLP, get_model_for_endgame
+from legacy.models import MLP, get_model_for_endgame
 import os
 import json
 import argparse

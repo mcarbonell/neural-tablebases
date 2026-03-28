@@ -18,11 +18,11 @@ import pickle
 
 # Importar funciones existentes
 sys.path.append(os.path.dirname(__file__))
-from generate_datasets import encode_board, piece_move_distance, encode_board_relative
+from legacy.generate_datasets import encode_board, piece_move_distance, encode_board_relative
 
 # Importar canonical forms
 try:
-    from canonical_forms import find_canonical_form, board_to_encoding_key
+    from data.canonical_forms import find_canonical_form, board_to_encoding_key
 except ImportError:
     # Si no está disponible, crear funciones dummy
     print("WARNING: canonical_forms module not found. Using dummy functions.")

@@ -8,8 +8,8 @@ import time
 
 # Import local tools
 sys.path.append(os.path.dirname(__file__))
-from dataset_v8 import ChessGNNDataset
-from models_v8 import get_gnn_model
+from data.dataset_v8 import ChessGNNDataset
+from model.models_v8 import get_gnn_model
 
 def train_v8_prototype(data_path: str, epochs: int = 20, batch_size: int = 128):
     print(f"Loading Dataset: {data_path}...")
