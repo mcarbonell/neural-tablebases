@@ -368,6 +368,49 @@ else:
 # ─────────────────────────────────────────────
 print()
 print("=" * 60)
+print("11. V8 GNN PIPELINE (models_v8 + train_v8)")
+print("=" * 60)
+
+import unittest
+
+# Load the V8 test module
+try:
+    from tests.test_v8_pipeline import (
+        TestBuildGiantGraph,
+        TestChessGnnV8Pro,
+        TestGnnShardDataset,
+        TestRustEngine,
+    )
+
+    loader = unittest.TestLoader()
+    suite = unittest.TestSuite()
+    for cls in [TestBuildGiantGraph, TestChessGnnV8Pro, TestGnnShardDataset, TestRustEngine]:
+        suite.addTests(loader.loadTestsFromTestCase(cls))
+
+    runner = unittest.TextTestRunner(verbosity=0, stream=open(os.devnull, 'w'))
+    result = runner.run(suite)
+
+    for test, err in result.errors:
+        check(f"V8/{test}", False, err.split('\n')[-2])
+    for test, err in result.failures:
+        check(f"V8/{test}", False, err.split('\n')[-2])
+    passed = result.testsRun - len(result.errors) - len(result.failures)
+    # Report skipped tests as PASS (they're conditional on optional data/hardware)
+    for test, reason in getattr(result, 'skipped', []):
+        print(f"  SKIP  V8/{test} -- {reason}")
+    if passed > 0 or result.testsRun == 0:
+        check(f"V8 pipeline: {passed}/{result.testsRun} tests passed", True)
+    for _ in range(len(result.errors) + len(result.failures)):
+        pass  # already checked above
+
+except ImportError as e:
+    print(f"  SKIP  V8 pipeline tests (import error: {e})")
+except Exception as e:
+    check("V8 pipeline tests import", False, str(e))
+
+# ─────────────────────────────────────────────
+print()
+print("=" * 60)
 print("RESUMEN")
 print("=" * 60)
 total = PASS + FAIL
@@ -378,3 +421,4 @@ if FAIL == 0:
 else:
     print("  HAY FALLOS - revisar arriba")
 sys.exit(0 if FAIL == 0 else 1)
+

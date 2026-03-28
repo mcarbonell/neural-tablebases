@@ -30,7 +30,12 @@ Achieve parity with Stockfish intuition while maintaining Syzygy technicality.
 4. **Repository Cleanup** → Moved 12+ debug/test/train scripts from root to `scripts/debug/`, `scripts/canonical/`, `scripts/train/`.
 5. **`TODO.md` Synchronized** → Reflects V8-Pro state (not V5-MLP legacy tasks).
 
-## Quick Links
+## Sprint H2 — Completed 2026-03-28
+1. **`src/searcher_v8.py`** → `GnnSearcher` class with Alpha-Beta Minimax over ChessGnnV8_Pro. Includes position caching and a CLI benchmark to compare depth=0/1/2 accuracy (core validation experiment for the paper).
+2. **`tests/test_v8_pipeline.py`** → 15 unit tests covering `build_giant_graph`, `ChessGnnV8_Pro` forward pass (shape, NaN, softmax), `GnnShardDataset` item format, and `RustGnnEngine` interface.
+3. **`run_tests.py` Section 11** → Integrates V8 tests into the main test runner. All 15 V8 tests pass.
+
+
 - [Main README](README.md)
 - [Documentation Index](docs/README.md)
 - [GNN Model Architecture](src/models_v8.py)

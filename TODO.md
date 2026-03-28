@@ -23,12 +23,15 @@
 ## 🎯 SPRINT INMEDIATO
 
 ```
-[ ] eval_v8_tablebase.py — Validar modelo contra Syzygy después de training
+[x] searcher_v8.py — GnnSearcher con Alpha-Beta Minimax sobre V8-GNN — 2026-03-28
+    python src/searcher_v8.py --model data/v8_pro_triple_head_best.pth \
+        --syzygy syzygy --configs KRvK,KQvK --samples 200 --depths 0,1,2
+
+[x] Tests V8 — 15/15 tests pasan en tests/test_v8_pipeline.py — 2026-03-28
+
+[ ] eval_v8_tablebase.py — Ejecutar cuando termine el Epoch 1 del entrenamiento
     python src/eval_v8_tablebase.py --model data/v8_pro_triple_head_best.pth \
         --syzygy syzygy --configs KRvK,KQvK,KPvK,KRvKP --samples 500
-
-[ ] searcher_v8.py — Portar GNN-Search a V8 (hipótesis central del paper)
-    Target: WDL-Acc depth=1 > 99%
 
 [ ] ONNX export V8 — Latencia < 10ms por posición en CPU
     Adaptar src/export_onnx.py a la interfaz de grafos V8
