@@ -1,6 +1,9 @@
-# 🚀 TODO — V8-Pro Triple Head Phase
+# 🚀 TODO — Syzygy GNN Compression (neural-tablebases)
 
 Última actualización: 28 de marzo, 2026
+
+> **Scope:** Este repo es exclusivamente para compresión de Tablebases Syzygy.
+> El entrenamiento Lichess/Stockfish está en [`neural-chess-eval`](../neural-chess-eval).
 
 ---
 

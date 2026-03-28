@@ -90,4 +90,7 @@ MIT License. See [LICENSE](LICENSE).
 ---
 
 Last updated: March 28, 2026
-Current focus: V8-Pro Triple Head training (100M+ Lichess positions), GNN-Search integration, ONNX export
+Current focus: V8-Pro GNN training on Syzygy tablebases, GNN-Search integration, ONNX export
+
+> **Sibling repo:** [`neural-chess-eval`](../neural-chess-eval) — Universal evaluation function trained on Lichess/Stockfish data (100M+ positions).
+

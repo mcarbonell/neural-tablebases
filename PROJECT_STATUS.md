@@ -1,6 +1,8 @@
-# Project Status: V8-Pro Triple Head Industrial Phase 🧬♟️
+# Project Status: Neural Tablebases — Syzygy GNN Compression 🧬♟️
 
 Last updated: March 28, 2026
+
+> **⚠️ Repo scope update (2026-03-28):** The Lichess/Stockfish universal evaluation pipeline has been moved to [`neural-chess-eval`](../neural-chess-eval). This repository is now **strictly focused on Syzygy tablebase compression** using the V8-Pro RGNN + GNN-Search.
 
 ## 1. Major Breakthroughs 🚀
 - [x] **V8 4-Piece Endgame Perfection**: Reached a stable **99.83% Accuracy** in standard endgame tablebase compression.
