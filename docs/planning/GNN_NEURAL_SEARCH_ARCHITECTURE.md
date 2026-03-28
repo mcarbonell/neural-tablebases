@@ -1,46 +1,80 @@
-# Arquitectura GNN: Motor de Búsqueda Neuronal (Neural Search)
+# Arquitectura GNN: Motor de Búsqueda Neuronal (Neural Search) - V8-Pro Phase
+
+> Última actualización: 28 de marzo, 2026
 
 ## 📌 Concepto Revolucionario
-Apartarse de las redes MLP estándar (cajas negras) para construir una **Graph Neural Network (GNN)** cuya estructura física sea idéntica a las reglas del ajedrez. En esta arquitectura, la red no "imagina" el juego, sino que lo **simula** a través de la propagación de señales tácticas entre nodos (casillas).
+Apartarse de las redes MLP estándar para construir una **Graph Neural Network (GNN)** cuya estructura física sea idéntica a las reglas del ajedrez. En esta arquitectura, la red no "imagina" el juego, sino que lo **simula** a través de la propagación de señales tácticas entre nodos (casillas).
 
 ---
 
-## 🏗️ Topología de la Red
+## 🏗️ Topología Implementada (V8-Pro)
 
-### Capa 0 (Input de Mapa de Calor)
-Cada una de las 64 casillas (nodos) recibe 4 señales fundamentales calculadas por un generador de movimientos rápido (ej. `x88.js`):
-1.  **Min_Attacker_Value_White**: Valor de la pieza blanca más débil atacando la casilla.
-2.  **Total_Attackers_White**: Número total de atacantes blancos.
-3.  **Min_Attacker_Value_Black**: Lo mismo para el bando negro.
-4.  **Total_Attackers_Black**: Lo mismo para el bando negro.
+### Nodo: Embedding Dimensional (128D)
+Cada casilla se representa como un vector latente que aprende su importancia táctica.
 
-### Capas 1 a N (Ply Simulation)
-Cada capa de la red representa un **Ply (Semijugada)** de profundidad:
-*   **Conexiones (Edges)**: Solo existen "cables" entre casillas si hay un movimiento legal posible (e1 conectado a e4 por una Torre).
-*   **Mensajería (Message Passing)**: La "energía" táctica fluye por los cables. Si una casilla está saturada de señales de ataque rival y no tiene defensa, el nodo "colapsa" en la siguiente capa (pieza capturada conceptualmente).
-*   **Visión de Rayos X (Skip Connections)**: Conexiones residuales que saltan capas para representar que una pieza bloqueada podría liberarse en un turno futuro.
+### Aristas: Relaciones Tácticas (16 tipos)
+En lugar de vectores de calor simples, la V8-Pro usa 16 tipos de relaciones inyectadas por el motor de **Rust MoveGen**:
+1.  **Direct Attacks**: Ataque directo a pieza enemiga.
+2.  **Defenses**: Protección de pieza propia.
+3.  **Pins (Clavadas)**: Inmovilización táctica de pieza enemiga.
+4.  **X-Rays**: Influencia a través de otras piezas.
+5.  **Checks (Jaque)**: Amenaza directa al Rey.
 
 ---
 
-## 🧠 Detección de Mate Natural
-A diferencia de un modelo tradicional, en esta GNN el mate se detecta por la **convergencia de señales**. Si en el Ply 3 todas las señales de amenaza convergen en las casillas adyacentes al Rey rival y sus casillas de "Oxígeno" están en cero, la red emitirá una señal de salida de "Mate Inevitable" con 100% de confianza.
+## 👁️ Global Attention Pooling (Feedback Reasoning)
+La V8-Pro ha implementado el **Razonamiento Selectivo**. En lugar de promediar el tablero, usa una capa de atención global para decidir qué cuadrante o pieza es el centro de gravedad de la posición:
+*   **Filtro Estratégico**: Ignora regiones inertes.
+*   **Convergencia Tactics**: Concentra el 80% de la "capacidad cerebral" en el foco de la lucha.
 
 ---
 
-## 🛠️ Implementación Técnica Sugerida
-*   **Grado de adyacencia dinámico**: La matriz de adyacencia se enmascara según la ocupación del tablero.
-*   **Pesos compartidos**: Todas las capas de movimiento usan los mismos pesos (red recurrente), lo que mantiene el tamaño del modelo diminuto pero permite una profundidad de cálculo infinita aumentando las iteraciones.
+## 🔱 Triple Head Evaluation (Universal Output)
+La arquitectura ahora entrega tres señales síncronas:
+1.  **WDL Classification**: Resultado binario/terciario (G/T/P).
+2.  **DTZ Regression**: Profundidad técnica hasta la conversión (Syzygy).
+3.  **Eval Stockfish-Distillation**: Intuición táctica en centipeones tanh([-1, 1]).
 
 ---
 
-## ⚡ El Ciclo de Retroalimentación (Feedback Reasoning)
-A diferencia de las redes tradicionales de un solo sentido, esta GNN implementa un ciclo de **"Razonamiento Retroactivo"**:
-1.  **Exploración (Forward)**: Las piezas proyectan su influencia en el tablero.
-2.  **Consecuencia (Backward)**: Si una casilla de destino resulta ser peligrosa o no tiene salidas (Oxígeno = 0), la señal viaja de vuelta por el mismo cable al origen.
-3.  **Inhibición**: La pieza de origen "apaga" su intención de moverse a esa casilla basándose en la retroalimentación de la capa superior.
-4.  **Convergencia**: El proceso se repite $N$ veces hasta que la red alcanza un "Estado Estable" que representa la valoración pura de la posición tras considerar múltiples plys de consecuencias.
+## 🚀 Estado de Implementación: GNN-Inference en Negamax
+
+### ✅ Completado (28-03-2026)
+
+**`src/searcher_v8.py`** — `GnnSearcher` operacional:
+- Alpha-Beta Minimax sobre `ChessGnnV8_Pro` como función de evaluación de hojas.
+- Caché de evaluación por FEN para evitar llamadas GNN redundantes dentro de un árbol.
+- Perspectiva correcta: score en perspectiva de Blancas para el Minimax.
+- CLI de benchmark: compara WDL-Acc a depth=0/1/2 sobre configs de endgame.
+
+```bash
+# Benchmark de validación del paper
+python src/searcher_v8.py \
+    --model data/v8_pro_triple_head_best.pth \
+    --syzygy syzygy \
+    --configs KRvK,KQvK,KPvK,KRvKP \
+    --samples 200 --depths 0,1,2 \
+    --output data/logs/gnn_search_benchmark.json
+```
+
+**`src/export_onnx_v8.py`** — Export ONNX + benchmark de latencia:
+- Exporta a ONNX con batch dinámico y edge count dinámico.
+- Mide latencia end-to-end: Rust extraction + GNN forward (target: < 10ms).
+
+```bash
+python src/export_onnx_v8.py \
+    --model data/v8_pro_triple_head_best.pth \
+    --output data/v8_pro_triple_head.onnx \
+    --benchmark --n_bench 200
+```
+
+### ⏳ Pendiente
+
+*   **Resultado experimental**: Aún falta ejecutar el benchmark con un modelo converged (target: depth=1 → >99% WDL-Acc). Requiere finalizar el Epoch 1 del entrenamiento en Lichess.
+*   **Pruning Topológico**: Usar los attention weights de `GlobalAttentionPooling` por posición como "move priority score" para ordenar los hijos del árbol antes del alpha-beta. Esto crearía una sinergia GNN-búsqueda única en la literatura.
+*   **ONNX Runtime Integration**: Sustituir el forward pass de PyTorch por `ort.InferenceSession` para inferencia más rápida en CPU durante la búsqueda en tiempo real.
 
 ---
 
 ## 📈 Resumen
-Esta arquitectura fusiona lo mejor de dos mundos: la **precisión matemática** de un generador de movimientos (movegen) con la **intuición estadística** de una red neuronal.
+Esta arquitectura fusiona lo mejor de dos mundos: la **precisión matemática** del generador de movimientos (movegen) con la **intuición estadística** de una red GNN de última generación. El GNN-Search es el puente entre ambos dominios y el experimento validador del paper.
