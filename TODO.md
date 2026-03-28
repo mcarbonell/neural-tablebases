@@ -1,71 +1,85 @@
-# 🚀 TODO: COMPLETAR 4/5-PIEZAS + BUGFIX
+# 🚀 TODO — V8-Pro Triple Head Phase
 
-## ✅ STATUS ACTUAL
-```
-KPvK: 100.00% (V5 + Search D1) ✅ (NEW)
-KPvKP: 81% (v4) -> Goal: 99%+ with V5
-KRPvKP: 94.1% (5p, epoch 8+) ✓
-Pendientes: Migrar todo el pipeline a Encoding V5 (King-first)
-GPU (AMD 780M): DirectML active (1.1s/epoch) ✅
-```
+Última actualización: 28 de marzo, 2026
 
-## 🎯 IMMEDIATE (HOY - 2h)
-```
-[ ] 1. GENERATE KPvKP V5 (Parallel)
-    python src/generate_datasets_parallel.py --config KPvKP --relative --version 5 --canonical --data data/v5
-[ ] 2. TRAIN KPvKP V5
-    python src/train.py --data_path data/v5/KPvKP_canonical.npz --epochs 200 --model_name mlp_kpvkp_v5
-[ ] 3. VERIFY SEARCH (Target 100%)
-    python src/verify_search_correction.py --onnx data/mlp_kpvkp_v5.onnx
+---
+
+## ✅ COMPLETADO
 
 ```
-
-## 📦 4-PIEZAS (ESTA SEMANA - 1.25h cada uno)
-```
-[x] KPvKP ✓
-[ ] KRvKP: generate + train canonical 200e
-[ ] KBPvK: generate + train canonical 200e
-[ ] KRvKN: generate + train canonical 200e
-[ ] KQvKQ: generate + train canonical 200e
-```
-
-**Template comando**:
-```bash
-python src/generate_datasets_parallel.py --config ENDGAME --relative --version 4 --canonical --canonical-mode auto
-python src/train.py --data_path data/ENDGAME_canonical.npz --epochs 200 --batch_size 512 --model_name mlp_ENDGAME_v4_canonical
+[x] V8-Pro Architecture (RGNN, 1.17M params, 4 GNN layers)
+[x] Global Attention Pooling — razonamiento selectivo por casilla
+[x] Triple Head — WDL + DTZ + Stockfish-Eval simultáneos
+[x] Lichess Sharding — 266 shards (~100M posiciones, 1.8 GB)
+[x] Rust MoveGen — 16 tipos de arista táctica, 100% WAC precision
+[x] DirectML AMD — Radeon 780M iGPU, ~693 pos/s en régimen
+[x] LayerNorm + Dropout + Cosine LR Schedule
+[x] Best checkpoint tracker (_best.pth) — Añadido 2026-03-28
+[x] build_giant_graph vectorizado (sin bucle Python) — 2026-03-28
 ```
 
-## 🏗️ 5-PIEZAS (PRÓXIMO MES - sampled 20%)
-```
-[ ] KRRvKP: regenerate canonical + train
-[ ] KNNvK: generate sampled + train
-[ ] KBBvKN: generate sampled + train
-[ ] etc... (top 10 por frecuencia self-play)
-```
-**Nota**: Usar `--limit-items 20%` para datasets >10M
+---
 
-## 📊 VALIDACIÓN FINAL
-```
-[ ] Benchmark suite: scripts/complete_4p5p_benchmark.py
-[ ] ELO self-play vs Syzygy baseline
-[ ] Update docs/results/4p5p_summary.md
-[ ] Paper ICGA: incluir tabla completa
-```
+## 🎯 SPRINT INMEDIATO
 
-## 🎓 HIPERPARAMS ESTÁNDAR
 ```
-epochs: 200
-batch_size: 512
-lr: 0.001
-model: mlp
-hard_mining: true (epochs 50+)
+[ ] eval_v8_tablebase.py — Validar modelo contra Syzygy después de training
+    python src/eval_v8_tablebase.py --model data/v8_pro_triple_head_best.pth \
+        --syzygy syzygy --configs KRvK,KQvK,KPvK,KRvKP --samples 500
+
+[ ] searcher_v8.py — Portar GNN-Search a V8 (hipótesis central del paper)
+    Target: WDL-Acc depth=1 > 99%
+
+[ ] ONNX export V8 — Latencia < 10ms por posición en CPU
+    Adaptar src/export_onnx.py a la interfaz de grafos V8
 ```
 
-## 📈 METAS
+---
+
+## 📦 ESTA SEMANA
+
 ```
-4-piezas avg: 98% → 99.8% (search depth=2)
-5-piezas avg: 94% → 99.5%
-Compresión total: <1MB todas 4-piezas
-ICGA paper: SUBMITIR
+[ ] Tests V8 en run_tests.py / tests/test_v8_pipeline.py
+    - test_rust_engine_loads()
+    - test_gnn_forward_pass()
+    - test_gnn_shard_dataset()
+
+[ ] Pre-computar grafos COO en shards (eliminar decode en DataLoader)
+
+[ ] Fine-tuning: freeze GNN layers → re-entrenar cabezas WDL+DTZ sobre Syzygy
+    (después de que el pre-train en Lichess converja ≥80%)
 ```
 
+---
+
+## 🏗️ PRÓXIMO MES
+
+```
+[ ] Paper ICGA — tabla V1→V8 accuracy progression + ablation study
+[ ] Pruning topológico Minimax — usar attention weights como move priority
+[ ] Motor UCI mínimo — para demos y benchmarks públicos
+```
+
+---
+
+## 📊 METAS
+
+```
+V8-Pro WDL-Acc (Lichess): 79% → 85%+
+V8-Pro WDL-Acc (Syzygy 4-piezas): 99.83% con search depth=1
+ONNX latencia: < 10ms por posición en CPU
+Paper ICGA: SUBMIT
+```
+
+---
+
+## 🎓 HIPERPARAMS V8-PRO ESTÁNDAR
+
+```
+node_dim: 128
+num_layers: 4
+dropout: 0.1
+batch_size: 1024
+lr: 0.001 (Cosine Annealing → 0.0001)
+optimizer: AdamW (weight_decay=1e-4)
+```

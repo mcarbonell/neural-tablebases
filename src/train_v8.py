@@ -121,19 +121,31 @@ def train_v8():
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         log(f"Using device: {device}")
         
-    shards = sorted(glob.glob(os.path.join(args.data_dir, "*.npz")))
-    if not shards:
-        log(f"CRITICAL: No shards found in {args.data_dir}!")
-        return
-
     model = ChessGnnV8_Pro(node_dim=128, num_layers=4).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
     
+    # Add Cosine Annealing Scheduler for smooth convergence
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=args.lr * 0.1)
+
+    # Rule 4.4: Load latest checkpoint if available
+    checkpoint_path = f"data/{args.model_name}_latest.pth"
+    if os.path.exists(checkpoint_path):
+        log(f"Loading weights from existing checkpoint: {checkpoint_path}")
+        model.load_state_dict(torch.load(checkpoint_path, map_location=device, weights_only=False))
+    
     log(f"Starting GNN-V8-Pro Triple Head Training: {args.model_name}")
     log(f"Model Parameters: {sum(p.numel() for p in model.parameters()):,}")
-    
+
+    # H1-A: Track best model across epochs
+    best_wdl_acc = 0.0
+    best_path = f"data/{args.model_name}_best.pth"
+
     for epoch in range(args.epochs):
         model.train()
+        cur_lr = optimizer.param_groups[0]['lr']
+        log(f"Epoch {epoch+1} starting. Current LR: {cur_lr:.6f}")
+        
+        # Init metrics
         total_correct_wdl = 0
         total_mae_dtz = 0
         total_mae_eval = 0
@@ -141,7 +153,18 @@ def train_v8():
         total_samples_dtz = 0
         total_samples_eval = 0
         
+        # Refresh and shuffle shards each epoch to include newly generated data
+        shards = sorted(glob.glob(os.path.join(args.data_dir, "*.npz")))
+        if not shards:
+            log(f"WARNING: No shards found in {args.data_dir} at Epoch {epoch+1}")
+            time.sleep(30)
+            continue
+            
         np.random.shuffle(shards)
+        log(f"Epoch {epoch+1} starting with {len(shards)} shards.")
+        
+        last_acc = 0
+        last_mae_eval = 0
         
         for s_idx, shard_path in enumerate(shards):
             ds = GnnShardDataset(shard_path)
@@ -149,6 +172,8 @@ def train_v8():
                               collate_fn=collate_vectorized, num_workers=2)
             
             start_shard = time.time()
+            shard_pos = 0 # Track pos in current shard for speed
+            
             for batch_idx, (p_ids, tac, srcs, dsts, etypes, B, wdl, dtz, ev) in enumerate(loader):
                 p_ids, tac = p_ids.to(device), tac.to(device)
                 srcs, dsts, etypes = srcs.to(device), dsts.to(device), etypes.to(device)
@@ -180,19 +205,41 @@ def train_v8():
                     total_samples_eval += B
                 
                 total_pos += B
+                shard_pos += B
                 
                 if batch_idx % 100 == 0:
-                    speed = total_pos / (time.time() - start_shard + 1e-6)
-                    # Handle display for MAE (avoid division by 0)
-                    mae_dtz_val = total_mae_dtz / (total_samples_dtz + 1e-6)
-                    mae_eval_val = total_mae_eval / (total_samples_eval + 1e-6)
+                    speed = shard_pos / (time.time() - start_shard + 1e-6)
+                    cur_acc = total_correct_wdl / total_pos * 100
+                    cur_mae_eval = total_mae_eval / (total_samples_eval + 1e-6)
+                    
+                    # Calculate Deltas
+                    delta_acc = cur_acc - last_acc if last_acc > 0 else 0
+                    delta_mae = cur_mae_eval - last_mae_eval if last_mae_eval > 0 else 0
+                    
+                    acc_str = f"{cur_acc:.2f}% ({delta_acc:+.2f}%)"
+                    mae_str = f"{cur_mae_eval:.4f} ({delta_mae:+.4f})"
                     
                     log(f"E{epoch+1} | S{s_idx+1}/{len(shards)} | B{batch_idx} | "
-                        f"L:{loss.item():.4f} | WDL-Acc:{total_correct_wdl/total_pos*100:.2f}% | "
-                        f"DTZ-MAE:{mae_dtz_val:.2f} | Eval-MAE:{mae_eval_val:.4f} | "
+                        f"L:{loss.item():.4f} | WDL-Acc:{acc_str} | "
+                        f"Eval-MAE:{mae_str} | "
                         f"Spd:{speed:.1f} pos/s")
+                    
+                    last_acc = cur_acc
+                    last_mae_eval = cur_mae_eval
 
             torch.save(model.state_dict(), f"data/{args.model_name}_latest.pth")
+
+        # H1-A: Save best model checkpoint
+        epoch_acc = total_correct_wdl / max(total_pos, 1) * 100
+        if epoch_acc > best_wdl_acc:
+            best_wdl_acc = epoch_acc
+            torch.save(model.state_dict(), best_path)
+            log(f"★ NEW BEST saved: {best_path} | WDL-Acc: {best_wdl_acc:.2f}%")
+
+        log(f"Epoch {epoch+1} complete. WDL-Acc: {epoch_acc:.2f}% | Best: {best_wdl_acc:.2f}%")
+
+        # Rule 4.5: Update LR
+        scheduler.step()
 
 if __name__ == "__main__":
     train_v8()
