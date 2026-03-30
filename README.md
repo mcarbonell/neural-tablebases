@@ -1,5 +1,9 @@
 # Neural Chess Tablebase Compression
 
+<p align="center">
+  <img src="docs/hero.svg" alt="Neural Tablebase Compression — V8-Pro" width="900"/>
+</p>
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
@@ -93,4 +97,3 @@ Last updated: March 28, 2026
 Current focus: V8-Pro GNN training on Syzygy tablebases, GNN-Search integration, ONNX export
 
 > **Sibling repo:** [`neural-chess-eval`](../neural-chess-eval) — Universal evaluation function trained on Lichess/Stockfish data (100M+ positions).
-
