@@ -96,10 +96,18 @@ This script checks encoding dimensions, board transformations, canonical form lo
 
 To ensure reproducibility and tracking of the neural network's evolution, the following rules MUST be followed:
 
-*   **Mandatory Logging:** All training scripts MUST save logs to disk in the `data/` directory (or a `logs/` subdirectory).
-    *   Log filename format: `train_version_flags.log` (e.g., `train_v8_pro_fast.log`).
-    *   Log header: Every log file MUST start with the exact command string used to launch the training.
-    *   Content: Logs must include epoch metrics (Loss, Accuracy, Speed, etc.) in a human-readable format.
+*   **Mandatory Logging:** All training scripts MUST save logs to disk in the `data/logs/` directory.
+    *   Log filename format: `train_{name}.log`.
+    *   Log header: Every log file MUST start with the exact command string used AND the full launch date/time (`LAUNCH TIME: YYYY-MM-DD HH:MM:SS`).
+    *   Content format: Each log line must use elapsed time since launch (`HH:MM:SS`) and include:
+        *   `Epoch / Batch`
+        *   `Loss` with delta (+/-) from last log.
+        *   `Accuracy` (for WDL) with delta (+/-).
+        *   `MAE` (for DTZ) with delta (+/-).
+        *   `Speed` in positions per second.
+        *   `Learning Rate` (LR).
+    *   **Example Log Line:**
+        `00:05:23 | Epoch 2 | Batch 450 | Loss: 0.0012 (-0.0001) | Acc: 0.9982 (+0.0005) | MAE: 0.85 (-0.02) | Speed: 405 pos/s | LR: 1.00e-03`
 *   **No File Overwriting:** When a new architecture or significant training variation is created:
     *   Create a new definition file: `models_v{N}.py`.
     *   If specialized training logic is needed: `train_v{N}.py`.

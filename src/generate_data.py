@@ -67,6 +67,7 @@ def process_chunk_gnn(args):
         chunk_edge_counts = []
         chunk_wdl = []
         chunk_dtz = []
+        chunk_turns = []
         
         num_pieces = len(all_pieces)
         
@@ -124,6 +125,7 @@ def process_chunk_gnn(args):
                         chunk_edge_counts.append(edge_count)
                         chunk_wdl.append(wdl)
                         chunk_dtz.append(dtz)
+                        chunk_turns.append(int(board.turn))
                         kept += 1
                     except Exception:
                         continue
@@ -139,7 +141,8 @@ def process_chunk_gnn(args):
             "edges": np.array(chunk_edges, dtype=np.uint16),
             "edge_counts": np.array(chunk_edge_counts, dtype=np.uint16),
             "wdl": np.array(chunk_wdl, dtype=np.int8),
-            "dtz": np.array(chunk_dtz, dtype=np.int16)
+            "dtz": np.array(chunk_dtz, dtype=np.int16),
+            "turn": np.array(chunk_turns, dtype=np.int8)
         }, processed, kept)
     except Exception as e:
         print(f"Critical error in chunk {chunk_id}: {e}")
