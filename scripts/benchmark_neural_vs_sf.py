@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 # Add src to sys.path for internal imports
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
-from model.models_v8 import build_giant_graph
+from model.models_v8_pro import ChessGnnV8_Pro, build_giant_graph
 from search.rust_engine import RustGnnEngine
 from data.canonical_forms import is_canonical
 
@@ -28,26 +28,16 @@ except ImportError:
     HAS_DIRECTML = False
 
 class NeuralEvaluator:
-    def __init__(self, model_path, device):
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        try:
-            import torch_directml
-            self.device = torch_directml.device()
-        except:
-            pass
-            
-        print(f"Using {self.device} for Neural GNN.")
-        
-        self.engine = RustGnnEngine()
-        
-        # We unified Vanguard into ChessGnnV8_Pro
-        from model.models_v8 import ChessGnnV8_Pro
+    def __init__(self, model_path: str, device: str = "cpu"):
+        self.device = torch.device(device)
         self.model = ChessGnnV8_Pro().to(self.device)
         
         print(f"Loading Neural GNN weights from {model_path}...")
-            
-        self.model.load_state_dict(torch.load(model_path, map_location=device, weights_only=False))
+        # Using strict=False because we added a dummy eval_head for training compatibility
+        # which is not present in the original 35M checkpoint.
+        self.model.load_state_dict(torch.load(model_path, map_location=self.device, weights_only=False), strict=False)
         self.model.eval()
+        self.engine = RustGnnEngine()
 
     @torch.no_grad()
     def evaluate_batch(self, boards: List[chess.Board]) -> List[int]:
@@ -59,14 +49,13 @@ class NeuralEvaluator:
         list_etypes = []
         
         for board in boards:
-            # Vanguard V8 normalization: Mirror if Black to move
-            # This reflects squares, ranks, and swaps piece colors.
-            # The model always sees the position as 'Us' (White IDs) vs 'Them' (Black IDs).
+            # Vanguard V8 PRO: Verified Normalized Perspective.
+            # We mirror the board for Black turn to present it as 'White to move' with White IDs.
             if board.turn == chess.BLACK:
                 process_board = board.mirror()
             else:
                 process_board = board
-            
+                
             p_ids, tac, edges, edge_count = self.engine.get_raw_features(process_board.fen())
             
             raw_edges = edges[:edge_count]
@@ -93,7 +82,7 @@ class NeuralEvaluator:
         
         preds = torch.argmax(out_wdl, dim=1).cpu().numpy()
         
-        # No flip needed: the board was mirrored, so prediction is now relative to STM.
+        # No flip needed because we mirrored the board for output alignment.
         return preds.tolist()
 
 def get_all_endgames(syzygy_path: str) -> List[str]:
