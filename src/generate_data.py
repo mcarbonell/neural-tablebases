@@ -156,7 +156,7 @@ class ShardManager:
         self.current_shard_idx = 0
         self.buffer = {
             "p_ids": [], "node_tac": [], "edges": [], 
-            "edge_counts": [], "wdl": [], "dtz": []
+            "edge_counts": [], "wdl": [], "dtz": [], "turn": []
         }
         self.buffered_count = 0
         os.makedirs(output_dir, exist_ok=True)
@@ -185,7 +185,8 @@ class ShardManager:
             edges=np.concatenate(self.buffer["edges"]),
             edge_counts=np.concatenate(self.buffer["edge_counts"]),
             wdl=np.concatenate(self.buffer["wdl"]),
-            dtz=np.concatenate(self.buffer["dtz"])
+            dtz=np.concatenate(self.buffer["dtz"]),
+            turn=np.concatenate(self.buffer["turn"])
         )
         
         # Reset buffer
