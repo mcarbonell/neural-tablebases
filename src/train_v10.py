@@ -53,15 +53,11 @@ class GnnShardDatasetV10(Dataset):
         data = np.load(npz_path, allow_pickle=True)
         self.p_ids = data['p_ids']
         self.node_tac = data['node_tac']
-        self.edges = data['edges'] # Flattened [N, 3]
+        self.edges = data['edges'] # [N, 1024] Encoded uint16
         self.edge_counts = data['edge_counts']
         self.wdl = data['wdl']
         self.dtz = data['dtz']
         self.turns = data['turn']
-        
-        # Calculate offsets for edge slicing
-        self.edge_offsets = np.zeros(len(self.edge_counts) + 1, dtype=np.int32)
-        self.edge_offsets[1:] = np.cumsum(self.edge_counts)
 
     def __len__(self):
         return len(self.p_ids)
@@ -73,13 +69,13 @@ class GnnShardDatasetV10(Dataset):
         wdl = self.wdl[idx]
         dtz = self.dtz[idx]
         
-        # Slice edges for this position
-        start, end = self.edge_offsets[idx], self.edge_offsets[idx+1]
-        edges_idx = self.edges[start:end] # [E, 3] (src, dst, type)
+        # Decode edges from packed uint16
+        count = int(self.edge_counts[idx])
+        encoded = self.edges[idx][:count]
         
-        l_src = edges_idx[:, 0]
-        l_dst = edges_idx[:, 1]
-        l_et = edges_idx[:, 2]
+        l_et = (encoded >> 12) & 0xF
+        l_src = (encoded >> 6) & 0x3F
+        l_dst = encoded & 0x3F
         
         # Perspective Normalization (V10 Improvement)
         if turn == 0: # Black to move (0=Black, 1=White)

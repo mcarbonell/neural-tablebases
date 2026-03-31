@@ -38,14 +38,22 @@ Este documento registra la evolución de las arquitecturas neuronales del proyec
 
 ---
 
-## [ACTIVE] Vanguard V10 (Geometric Fusion GNN)
-- **Status**: En Desarrollo (Hibridación GNN + Geometría).
-- **Archivo Model**: `src/model/models_v10.py`
-- **Innovación**: Integra las lecciones de la V4 (MLP Geométrica) en la arquitectura V9.
-- **Diferenciadores**:
-    1. **Perspective Normalization**: `flip_board` implementado en el pipeline de datos. La red siempre ve el tablero desde la perspectiva del bando que mueve (White-to-move). Eficiencia de entrenamiento 2x.
-    2. **Pawn Urgency Feature**: Inyección de `pawn_rank / 7.0` como feature de nodo. Resuelve la ceguera de la GNN ante la urgencia de la coronación.
-    3. **3D Batch Matmul**: Optimización de tensores `[B*16, 64, 64]` para máxima saturación de GPUs AMD (DirectML).
+## [ACTIVE] Vanguard V10: Geometric Fusion
+*   **Architecture**: Relational GNN (V9) + **Perspective Normalization** + **Pawn Progress Features**.
+*   **Key Innovation**: Normalizes all positions to "White-to-move" perspective and injects explicit rank-based urgency for pawns.
+*   **Results (KPvK)**:
+    *   **Accuracy**: **96.50%** (Significant jump from V9's 94.1%).
+    *   **DTZ MAE**: **0.92 moves**.
+    *   **Convergence**: Reached 94% in less than 1 epoch.
+*   **Status**: Frozen. Architecture validated as superior for spatial urgency.
+
+---
+
+### [NEW] Vanguard V10.1: Weighted Relational Graphs
+*   **Goal**: Bridge the cap to 99.9% accuracy in KPvK by matching the information density of the classic MLP.
+*   **Architecture**: Vanguard V10 + **Weighted Adjacency**.
+*   **Key Innovation**: Instead of binary connections (0 or 1), edges will carry **Geometric Weights** representing relative distances (dx, dy, Manhattan, Chebyshev).
+*   **Hypothesis**: By providing the exact relative distance between pieces on the edges, the GNN can learn precise thresholding rules for promotion/opposition without relying on square-coordinate inference.
 
 ---
 
