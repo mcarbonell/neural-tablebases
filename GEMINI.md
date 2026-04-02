@@ -99,6 +99,7 @@ To ensure reproducibility and tracking of the neural network's evolution, the fo
 *   **Mandatory Logging:** All training scripts MUST save logs to disk in the `data/logs/` directory.
     *   Log filename format: `train_{name}.log`.
     *   Log header: Every log file MUST start with the exact command string used AND the full launch date/time (`LAUNCH TIME: YYYY-MM-DD HH:MM:SS`).
+    *   **Architecture Header**: Following the launch time, the log MUST include the full model architecture topology (standard PyTorch string representation) and the total count of trainable parameters.
     *   Content format: Each log line must use elapsed time since launch (`HH:MM:SS`) and include:
         *   `Epoch / Batch`
         *   `Loss` with delta (+/-) from last log.
@@ -113,3 +114,14 @@ To ensure reproducibility and tracking of the neural network's evolution, the fo
     *   If specialized training logic is needed: `train_v{N}.py`.
     *   DO NOT overwrite successful previous versions. Maintain a clear history of the project's evolution.
 *   **Weight Checkpoints:** Always save the "best" model weights and periodically save checkpoints with metadata (`_metadata.json`) describing the training status.
+*   **Time-Marker Benchmarking**: When comparing different architectures, evaluations MUST be performed at consistent time intervals (**15m, 30m, 1h, 2h, 4h, 8h, 16h**) using the same hardware. Final precision alone is insufficient for a fair comparison, as it does not account for differences in training throughput (pos/s).
+
+
+## 5. Test Stockfish NNUE on the endgames
+
+```bash
+python scripts/benchmark_sf_random_endgames.py --configs KPvKP KPvKR KRvKN KBvKP --n 10000
+python scripts/benchmark_sf_kpvk_intuition.py
+```
+
+Read docs/analysis_sf_intuition_4p.md for the results.
