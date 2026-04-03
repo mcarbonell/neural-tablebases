@@ -6,6 +6,7 @@ import os
 import glob
 import time
 import argparse
+from tqdm import tqdm
 import sys
 import chess
 
@@ -148,12 +149,13 @@ def collate_gnn_v10_1(batch):
 
 def train():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_dir", type=str, required=True)
+    parser.add_argument("--data_dirs", type=str, required=True, help="Comma-separated list of data directories")
     parser.add_argument("--epochs", type=int, default=100) # Increased for 99.9% goal
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--name", type=str, default="v10_1_weighted")
     parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume from")
+    parser.add_argument("--workers", type=int, default=4, help="Number of data loader workers")
     args = parser.parse_args()
     
     log = setup_logger(args.name)
@@ -175,14 +177,25 @@ def train():
     criterion_dtz = nn.MSELoss()
     
     # 2. Data
-    shards = sorted(glob.glob(os.path.join(args.data_dir, "*.npz")))
-    log(f"Found {len(shards)} shards.")
+    # Collect shards from multiple directories (e.g. 4P and 5P datasets)
+    shards = []
+    for d in args.data_dirs.split(','):
+        d_clean = d.strip()
+        found = glob.glob(os.path.join(d_clean, "*.npz"))
+        print(f"Found {len(found)} shards in {d_clean}")
+        shards.extend(found)
+    shards = sorted(shards)
+    
+    if not shards:
+        print("No shards found in any directory!")
+        return
     
     best_acc = 0
     for epoch in range(args.epochs):
         model.train()
         total_loss, total_acc, total_mae, samples = 0, 0, 0, 0
-        last_loss, last_acc, last_mae = 0, 0, 0
+        epoch_start_time = time.time()
+        last_log_metrics = None
         
         # Shuffle shards each epoch for balanced universal training
         epoch_shards = shards.copy()
@@ -194,69 +207,71 @@ def train():
                 dataset, 
                 batch_size=args.batch_size, 
                 shuffle=True, 
-                collate_fn=collate_gnn_v10_1,
-                num_workers=4,
-                pin_memory=True
+                num_workers=args.workers,
+                pin_memory=True,
+                collate_fn=collate_gnn_v10_1
             )
             
-            epoch_start_time = time.time()
-            epoch_samples = 0
-            
-            for i, (p, tac, prog, adj, wdl, dtz, B) in enumerate(loader):
-                p, tac, prog, adj, wdl, dtz = [x.to(device) for x in [p, tac, prog, adj, wdl, dtz]]
+            pbar = tqdm(loader, desc=f"Epoch {epoch} | Shard {os.path.basename(shard)}", leave=False)
+            for batch_idx, (p_ids, tac, pawn_prog, adj, wdl, dtz, B) in enumerate(pbar):
+                p_ids, tac, pawn_prog, adj = p_ids.to(device), tac.to(device), pawn_prog.to(device), adj.to(device)
+                wdl, dtz = wdl.to(device), dtz.to(device).float()
                 
                 optimizer.zero_grad()
-                out_wdl, out_dtz = model(p, tac, prog, adj, B)
+                out_wdl, out_dtz = model(p_ids, tac, pawn_prog, adj, B)
                 
+                # Target WDL is 0, 1, 2 (mapped in collate).
                 loss_wdl = criterion_wdl(out_wdl, wdl)
-                loss_dtz = criterion_dtz(out_dtz.squeeze(), dtz / 100.0)
+                loss_dtz = criterion_dtz(out_dtz.squeeze(), dtz)
                 loss = loss_wdl + 0.1 * loss_dtz
                 
                 loss.backward()
                 optimizer.step()
                 
-                # Metrics
-                curr_loss = loss.item()
-                total_loss += curr_loss
-                preds = torch.argmax(out_wdl, dim=1)
-                curr_acc = (preds == wdl).sum().item() / B
-                total_acc += (preds == wdl).sum().item()
-                curr_mae = torch.abs(out_dtz.squeeze() * 100.0 - dtz).mean().item()
-                total_mae += curr_mae * B
+                # Metrics (global epoch accumulation)
                 samples += B
-                epoch_samples += B
+                total_loss += loss.item() * B
                 
-                if i % 10 == 0:
+                preds = torch.argmax(out_wdl, dim=1)
+                total_acc += (preds == wdl).sum().item()
+                total_mae += torch.abs(out_dtz.squeeze() - dtz).sum().item()
+                
+                if batch_idx % 10 == 0:
+                    speed = samples / (time.time() - epoch_start_time + 1e-6)
+                    pbar.set_postfix({"Acc": f"{total_acc/samples:.4f}", "MAE": f"{total_mae/samples:.2f}", "S": f"{speed:.0f}"})
+                
+                # Periodic DISK logging every 100 batches (as per GEMINI.md rules)
+                if batch_idx % 100 == 0:
+                    avg_loss = total_loss / samples
                     avg_acc = total_acc / samples
                     avg_mae = total_mae / samples
-                    if last_loss == 0: d_loss, d_acc, d_mae = 0, 0, 0
-                    else:
-                        d_loss = curr_loss - last_loss
-                        d_acc = avg_acc - last_acc
-                        d_mae = avg_mae - last_mae
-                    last_loss, last_acc, last_mae = curr_loss, avg_acc, avg_mae
-                    
-                    elapsed = time.time() - epoch_start_time
-                    speed = epoch_samples / elapsed if elapsed > 0 else 0
                     lr = optimizer.param_groups[0]['lr']
-                    log(f"Epoch {epoch} | Batch {i} | Loss: {curr_loss:.4f} ({d_loss:+.4f}) | Acc: {avg_acc:.4f} ({d_acc:+.4f}) | MAE: {avg_mae:.2f} ({d_mae:+.2f}) | Speed: {speed:.0f} pos/s | LR: {lr:.2e}")
-        
-        # Checkpoint summary
+                    speed = samples / (time.time() - epoch_start_time + 1e-6)
+                    
+                    # Calculate deltas (+/-) from PREVIOUS log line
+                    if last_log_metrics:
+                        d_loss = avg_loss - last_log_metrics['loss']
+                        d_acc = avg_acc - last_log_metrics['acc']
+                        d_mae = avg_mae - last_log_metrics['mae']
+                    else:
+                        d_loss, d_acc, d_mae = 0, 0, 0
+                    
+                    last_log_metrics = {'loss': avg_loss, 'acc': avg_acc, 'mae': avg_mae}
+                    
+                    log(f"Epoch {epoch} | Batch {batch_idx} | Loss: {avg_loss:.4f} ({d_loss:+.4f}) | Acc: {avg_acc:.4f} ({d_acc:+.4f}) | MAE: {avg_mae:.2f} ({d_mae:+.2f}) | Speed: {speed:.0f} pos/s | LR: {lr:.2e}")
+
+            # End of Shard: Update BEST model
+            shard_acc = total_acc / samples
+            if shard_acc > best_acc:
+                best_acc = shard_acc
+                os.makedirs("data/checkpoints", exist_ok=True)
+                torch.save(model.state_dict(), f"data/checkpoints/{args.name}_BEST.pth")
+                log(f"New GLOBAL BEST after shard {os.path.basename(shard)}: {best_acc:.4f}. Saved.")
+
+        # End of Epoch
         avg_acc = total_acc / samples
-        avg_mae = total_mae / samples
-        log(f"--- EPOCA {epoch} FINALIZADA ---")
-        log(f"  Accuracy: {avg_acc:.4f} | LR: {optimizer.param_groups[0]['lr']:.2e}")
-        log(f"  DTZ-MAE: {avg_mae:.2f} moves")
-        
-        # Step scheduler
         scheduler.step(avg_acc)
-        
-        os.makedirs("data/checkpoints", exist_ok=True)
-        if avg_acc > best_acc:
-            best_acc = avg_acc
-            torch.save(model.state_dict(), f"data/checkpoints/{args.name}_BEST.pth")
-            log(f"  [NUEVO RÉCORD] Modelo guardado con acc: {best_acc:.4f}")
-            
+        log(f"Epoch {epoch} finished. Global Acc: {avg_acc:.4f}")
         torch.save(model.state_dict(), f"data/checkpoints/{args.name}_epoch_{epoch}.pth")
 
 if __name__ == "__main__":
